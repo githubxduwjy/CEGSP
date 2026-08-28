@@ -1,0 +1,393 @@
+# RTX 4090 实验方案：Ternary Discrete Basin Transport PTQ
+
+> Clean-room notice：本文档现在作为 historical plan 保留，不再作为后续 TDBT idea 修改或实验启动的 active entry。后续必须先读取 `TDBT_CLEANROOM_PROTOCOL.md` 与 `EXPERIMENT_TRACKER_TDBT_CLEANROOM.md`，重新预注册 `TDBT2-*` 实验；本文档中的旧 gate、层选择和实验结果只能作为 reference。
+
+**方法暂名**：TDBT-PTQ（Ternary Discrete Basin Transport for Post-Training Ternarization）  
+**问题**：三值 PTQ 是一次性选择离散终点，而 QAT 可以在量化前向下连续调整 latent weights。能否在不训练 latent weights 的情况下，在三值离散状态图中寻找一条低 barrier 的运输路径，从而关闭一部分 QAT–PTQ gap？  
+**硬件**：单张 RTX 4090 24GB
+**日期**：2026-08-26  
+**状态**：仅完成方案，不启动实验。
+
+## 1. 研究定位与边界
+
+已有 river–valley–basin 理论解释了一个一般现象：PTQ 可能把量化点推到低损失 basin 外，而 STE-based QAT 在量化点计算梯度、更新 latent weights，从而获得向 basin 内部的修正。该理论是 TDBT 的动机和对照解释，不是 TDBT 的创新本身。
+
+TDBT 的目标是把这个连续修正问题改写成三值离散控制问题：
+
+```text
+FP checkpoint -> initial ternary state T0
+              -> T1 -> T2 -> ... -> TK
+              -> deployed ternary state TK
+```
+
+方法主张不是“所有 PTQ 都只优化单点”，因为已有 PTQ 会进行迭代、贪心或近似搜索。准确的主张是：
+
+> TDBT 显式把路径最大 barrier、三值状态转移规则和 composed-operator 函数保持放进同一个 PTQ 优化问题，并检验三值零态是否能作为符号变化的离散缓冲状态。
+
+如果实验发现普通 one-shot gradient 或 endpoint-only beam search 已经达到同样效果，则必须删除“运输路径是必要的”这一主张。
+
+## 2. Claim Map
+
+| Claim | 最低可信证据 | 反证条件 | 阶段 |
+|---|---|---|---|
+| C1：固定三值码本和可比校准预算下，PTQ 与 QAT 存在可测的函数 gap，并且该 gap 在三值上具有离散状态特征 | QAT-256 相对 direct PTQ 在至少 3/4 个代表层降低 composed-operator distortion；等预算 FP fine-tuning + PTQ 不能解释全部收益；C4/W2 held-out 方向一致 | gap 不存在、只在 fit split 存在，或 equal-budget FP fine-tuning 已完全复现 | A |
+| C2：TDBT 在相同候选预算下比 endpoint-only 搜索和 one-shot quantized-gradient PTQ 更能关闭 gap，并且收益来自显式 barrier/三值转移而非更多计算 | TDBT 关闭至少 30% gap；paper-worthy gate 为至少 50%；zero-mediated 与 direct sign-flip、barrier 与 no-barrier 消融成立；耗时不超过 direct PTQ 3 倍 | one-shot 已达到 TDBT、zero-mediated 无额外收益、或只在 calibration fit 上改善 | B、C |
+
+### 必须排除的反主张
+
+- TDBT 只是 beam search、coordinate descent 或模拟退火的重新命名；
+- 路径 loss 只是额外计算量带来的收益；
+- 零态运输并不比直接符号翻转更有利；
+- barrier 在 calibration 上有效但在 untouched C4/Wikitext-2 失效；
+- TDBT 需要大量 backward steps，实际已经接近 QAT；
+- 只在原始坐标、单一层或单一校准集上有效。
+
+## 3. 三值离散状态与运输定义
+
+每个 group 的部署权重为：
+
+```text
+W_hat_g = alpha_g * T_g
+T_g ∈ {-1, 0, +1}
+```
+
+将每个元素的状态图定义为：
+
+```text
+-1 <-> 0 <-> +1
+```
+
+主假设是：对于三值系统，`0` 可以作为从 `+1` 到 `-1` 或从 `-1` 到 `+1` 的离散缓冲状态。但这不是预先接受的事实，必须和直接 sign flip 做对照。
+
+### 3.1 两类转移
+
+**直接转移对照**：
+
+```text
++1 -> -1
+-1 -> +1
+```
+
+**zero-mediated 转移**：
+
+```text
++1 -> 0 -> -1
+-1 -> 0 -> +1
+```
+
+zero-mediated 路径会带来临时 zero-rate 变化。主实验预注册每个 group 最多允许 1 个 transient zero slack；如果实现采用 pairwise replacement 保持 zero-rate，则必须记录它与 buffered 版本的差别。最终部署状态必须满足与 direct PTQ 相同的 zero-rate tolerance。
+
+### 3.2 路径 barrier
+
+设路径为 `P = {T0, T1, ..., TK}`。对 calibration micro-batch `x` 定义归一化函数损失：
+
+```text
+L_op(T, x) = normalized composed-operator distortion
+```
+
+路径 barrier 定义为：
+
+```text
+B(P) = max_k [ mean_x L_op(Tk, x) - mean_x L_op(T0, x) ]
+```
+
+终点目标为：
+
+```text
+E(P) = mean_x L_op(TK, x)
+```
+
+TDBT 的固定目标为：
+
+```text
+minimize  E(P) + lambda_barrier * max(B(P), 0)
+```
+
+`lambda_barrier` 在运行前固定，使用 baseline-normalized loss 后取 1.0；不允许根据 Wikitext-2/C4 test 事后修改。
+
+### 3.3 局部函数约束
+
+对目标窗口中的每个量化层 `j`，保留单层安全约束：
+
+```text
+L_local_j(TK) <= 1.05 * L_local_j(T0)
+```
+
+该约束是防止路径搜索牺牲某层来换取另一层收益的安全机制，不作为独立创新点。若约束导致候选接受率接近 0，记录为 `SAFE-BUT-VACUOUS`，不得事后放宽。
+
+## 4. 函数目标：Q/K、V/O 组合算子
+
+单层 weight NMSE 只能作为辅助指标。第一阶段只分析 OPT-350M 的 attention Q/K 和 V/O。
+
+Q/K 的组合目标为：
+
+```text
+D_QK(TQ, TK) =
+  E || X WQ WK^T X^T
+       - X WQ_hat WK_hat^T X^T ||_F^2
+  / (E || X WQ WK^T X^T ||_F^2 + eps)
+```
+
+V/O 使用：
+
+```text
+D_VO(TV, TO) =
+  E || X WV WO
+       - X WV_hat WO_hat ||_F^2
+  / (E || X WV WO ||_F^2 + eps)
+```
+
+窗口总损失使用 baseline-normalized average：
+
+```text
+L_op = 0.5 * normalized(D_QK) + 0.5 * normalized(D_VO)
+```
+
+如果某个窗口没有完整 Q/K 或 V/O 结构，则只计算存在的项，并在 tracker 中记录，不允许跨窗口重新定义权重。
+
+## 5. TDBT 求解器
+
+### 5.1 初始化
+
+从当前最强、可复现的三值 PTQ initializer `T0, alpha0` 开始。第一版使用 PT²-LLM official/reproduced configuration；不以已经经过 test 选择的 hard-T 候选作为初始化器。
+
+### 5.2 Quantized-point gradient 候选生成
+
+主变体 `TDBT-G` 在当前部署三值权重处计算一次 calibration loss 的 STE gradient `g_q`。它不更新 latent FP weights，只将梯度用于候选排序。
+
+对候选状态变化 `Delta T`，使用一阶分数：
+
+```text
+score(Delta T) = - alpha * <g_q, Delta T>
+```
+
+候选包括：
+
+```text
+zero -> +1
+zero -> -1
++1 -> 0
+-1 -> 0
++1 -> -1
+-1 -> +1
+```
+
+每个目标层只保留固定 Top-64 候选。Top-K 不能通过 test 选择。
+
+### 5.3 Forward-only 对照
+
+`TDBT-F` 不计算 backward，只用 activation/Hessian summary 和 finite-difference-compatible operator loss 生成候选。它代表严格的 forward-only PTQ 版本。
+
+若只有 `TDBT-G` 成功，论文必须把方法标为 gradient-assisted PTQ，明确报告 backward 成本；不能把它包装成完全无梯度 PTQ。
+
+### 5.4 Beam transport
+
+固定 beam width `B=4`，最大微步数 `H=8`，最多两轮 pass。每轮：
+
+1. 从当前 beam 状态生成 Top-64 ternary transitions；
+2. 用 exact forward 计算 `L_op` 和 `B(P)`；
+3. 丢弃违反 local constraint 的候选；
+4. 按 `E(P) + B(P)` 保留 beam；
+5. 在 `val-B` 上连续两轮没有改善则停止；
+6. 冻结 `T` 后仅重拟合 group `alpha`。
+
+中间状态只保存为 CPU patch list，最终只导出 `T_K` 和 `alpha_K`。
+
+### 5.5 理论目标
+
+目标不是证明真实神经网络全局收敛，而是给出一个局部 safety lemma：若在某个 basin 内损失满足 `H`-smooth，且每个 accepted transition 满足：
+
+```text
+<gq, Delta W> + 0.5 * H * ||Delta W||^2 <= 0
+```
+
+并且 `||Delta W||_H` 小于预设 basin radius，则每一步的 loss 上界不超过 barrier threshold，有限步路径不会因为单个状态跳变直接越过该局部 basin。
+
+该 lemma 只能解释“为什么 barrier-aware transition 有可能安全”，不能声称真实大模型一定满足 basin 假设。实验必须验证假设是否在代表层近似成立。
+
+## 6. 强制对照矩阵
+
+所有方法使用相同 FP checkpoint、相同 group size、相同 fit token、相同候选评估预算和相同最终 scale refit。
+
+| 方法 | latent FP 更新 | quantized-point gradient | path barrier | zero-mediated transition |
+|---|---:|---:|---:|---:|
+| PT²/direct PTQ | 否 | 否 | 否 | 否 |
+| QG-one-shot | 否 | 是 | 否 | 否 |
+| endpoint-beam | 否 | 可选 | 否 | 可选 |
+| TDBT-F | 否 | 否 | 是 | 是/直接各一版 |
+| TDBT-G | 否 | 是 | 是 | 是/直接各一版 |
+| QAT-256 | 是 | 是 | 连续路径 | 不作离散约束 |
+| FP-FT + PTQ | 是，但 FP 前向 | 否 | 否 | 否 |
+
+`QAT-256` 是上界/参考，不是 TDBT 的公平计算对手。`FP-FT + PTQ` 用于排除“QAT 只是更多训练”的解释。
+
+## 7. 数据、模型和 4090 配置
+
+### 7.1 模型
+
+- harness：OPT-125M；
+- primary：OPT-350M；
+- 目标层：0、7、15、23；
+- 第一阶段只分析 Q/K、V/O；
+- TinyLlama-1.1B 只在主 gate 通过后条件复制。
+
+### 7.2 数据 split
+
+- `fit-A`：C4 train 固定片段，1,048,576 tokens；
+- `val-B`：不重叠的 C4，32 × 512 tokens；
+- `untouched-C`：C4 validation，32 × 512 tokens；
+- `untouched-W`：Wikitext-2，32 × 512-token windows；
+- untouched 数据不参与 beam width、barrier weight、checkpoint 或 layer 选择。
+
+### 7.3 QAT gap reference
+
+QAT 使用固定的 PTQ ternary grid，sequence length 512、micro-batch 1、gradient accumulation 8、BF16、gradient checkpointing、关闭 KV cache，固定 256 steps。QAT-64 只用于轨迹诊断。
+
+如果 QAT-256 只在 fit-A 改善、val-B 不能改善，判为 calibration overfit，不进入 TDBT。
+
+### 7.4 显存与成本
+
+- FP、PTQ、TDBT、QAT 顺序加载，GPU 不同时驻留多个完整模型；
+- 只保存 CPU ternary patch list、路径摘要和最终 code；
+- 4090 峰值硬门槛 21.5 GiB；
+- OOM 只允许 sequence 512→256、gradient accumulation 8→16，保持 token/step；
+- 不允许因为 OOM 删除 QAT、barrier 或 untouched 指标。
+
+## 8. 实验 Blocks
+
+### Block A0：4090 harness
+
+- **目的**：验证 ternary export、single-step gradient、candidate patch 和 composed-operator metric；
+- **模型**：OPT-125M；
+- **指标**：finite、ternary invariant、导出 parity、peak VRAM、step time；
+- **gate**：peak <18 GiB，全部 finite，重载输出一致；
+- **失败解释**：仅为 harness failure。
+
+### Block A1：QAT–PTQ gap 与 basin diagnostic
+
+- **比较**：direct PTQ、QAT-64、QAT-256、FP-FT + PTQ；
+- **指标**：D_QK、D_VO、单层 output NMSE、C4/W2 NLL、quantized-loss trajectory、FP→PTQ/QAT interpolation、wall-clock；
+- **C1 gate**：至少 3/4 层 QAT-256 相对 direct PTQ 改善 5%，bootstrap CI 不跨 0；FP-FT + PTQ 不能完全解释；
+- **失败解释**：停止“弥合 QAT gap”主线，不运行 TDBT 主方法。
+
+### Block B1：离散路径可行性诊断
+
+- **目的**：确认是否存在“direct endpoint 较差，但 bounded ternary path 能到达更低损失 endpoint”的现象；
+- **比较**：direct PTQ、one-shot QG、endpoint-beam、TDBT-F/TDBT-G；
+- **指标**：endpoint loss、max path barrier、transition count、zero-rate transient、Q/K/V/O distortion；
+- **必要对照**：direct sign-flip vs zero-mediated path；
+- **gate**：在至少 3/4 层，TDBT 的 barrier 或 held-out operator distortion 相对 endpoint-beam 改善至少 5%；否则关闭“路径是必要的”主张。
+
+### Block B2：三值机制消融
+
+- **消融**：无 barrier、无 zero-mediated、只优化 M、只优化 S、无 Q/K-V/O composed target、不同 transient zero slack；
+- **控制**：候选数、beam width、forward 次数、最终 state budget 相同；
+- **gate**：若 zero-mediated 版本和 direct sign-flip 无显著差异，只保留“barrier-aware ternary transport”，不再声称零态是关键运输通道。
+
+### Block C1：主方法 held-out 验证
+
+- **模型**：OPT-350M，层 0/7/15/23；
+- **比较**：PT²/direct、QG-one-shot、endpoint-beam、TDBT-F、TDBT-G、QAT-256；
+- **指标**：gap closure、untouched C4/W2 NLL、D_QK/D_VO、worst-domain CVaR、wall-clock、VRAM、forward/backward count；
+- **diagnostic gate**：至少 3/4 层 gap closure >=30%，bootstrap CI 为正；
+- **paper-worthy gate**：至少 3/4 层 gap closure >=50%，C4/W2 NLL 不恶化，耗时不超过 direct PTQ 3 倍；
+- **失败解释**：只保留机制诊断或 QG-one-shot 结果，不实现 full-model TDBT。
+
+### Block C2：泛化与第二模型
+
+- **触发**：C1 paper-worthy gate 通过；
+- **内容**：seed 1、第二校准片段、TinyLlama-1.1B 或第二个 300–500M 模型；
+- **目的**：证明不是单层、单 seed、单 calibration window 的 path search artifact；
+- **优先级**：NICE-TO-HAVE/CONDITIONAL。
+
+## 9. 运行顺序与机器决策
+
+| Run ID | 目标 | 预计 4090 时间 | Priority | Decision |
+|---|---|---:|---|---|
+| G4090-TDBT-00 | CUDA/BF16/导出/梯度 harness | 5–10 min | MUST | 通过才继续 |
+| G4090-TDBT-01 | OPT-125M ternary path toy/harness | 20–40 min | MUST | 只验证实现 |
+| G4090-TDBT-02 | OPT-350M QAT–PTQ gap | 1.5–3 h | MUST | A1 gate |
+| G4090-TDBT-03 | OPT-350M path feasibility | 30–90 min | CONDITIONAL | B1 gate |
+| G4090-TDBT-04 | M/S/barrier/zero-path ablations | 30–90 min | CONDITIONAL | B2 gate |
+| G4090-TDBT-05 | TDBT-F/TDBT-G held-out | 45–120 min | CONDITIONAL | C1 gate |
+| G4090-TDBT-06 | seed/model replication | 2–5 h | NICE | C2 gate |
+
+首轮必跑预算约 2–4 GPU-hours。若 A1 或 B1 不通过，停止后续方法实验；不得通过增加 beam width、扩大 layer sweep 或事后调 barrier weight 拯救。
+
+## 10. 预注册状态机
+
+```text
+A1 gap fail
+  -> STOP：没有可弥合的固定预算 QAT–PTQ gap
+
+A1 pass, B1 path opportunity fail
+  -> REFRAME：QAT gap 存在，但离散路径不是必要解释
+
+B1 pass, zero-mediated ablation fail
+  -> DROP_ZERO_CLAIM：保留 barrier-aware transport，删除零态通道主张
+
+B1 pass, TDBT <= QG-one-shot
+  -> DROP_PATH_CLAIM：one-shot gradient 足够，停止 beam/path 复杂化
+
+C1 diagnostic pass but paper-worthy fail
+  -> OBSERVATIONAL / LOW-COST PTQ：不扩展 full-model，不夸大 gap closure
+
+C1 paper-worthy pass
+  -> 才允许第二模型、第二 seed 和 full-model 设计
+
+OOM / nonfinite / split leak / export mismatch
+  -> INVALID_HARNESS：只修一次明确工程问题并重跑同一配置
+```
+
+## 11. 与相邻工作的边界
+
+不能声称“现有 PTQ 都是单点优化”，也不能只凭使用 beam search 声称新颖。TDBT 的差异化必须同时满足：
+
+1. path maximum barrier 是显式优化对象，而不是搜索过程中的隐含 loss；
+2. 状态空间固定为三值 `{-1,0,+1}`，并显式检验 zero-mediated transition；
+3. 目标是 Q/K、V/O composed operator，而不是只做独立 layer reconstruction；
+4. 方法不更新 latent FP weights，且成本显著低于 QAT；
+5. 实验显示 path/barrier/zero-state 中至少有一个组件在 matched compute 下不可被 endpoint-only 或 one-shot gradient 替代。
+
+如果任何一项不成立，论文应缩小主张，不能用概念命名代替证据。
+
+## 12. 论文主线与剪枝规则
+
+### Main paper 必须包含
+
+- 固定网格下的 QAT–PTQ gap；
+- FP-FT + PTQ control；
+- TDBT 与 one-shot / endpoint-only 的 matched-budget 比较；
+- barrier 和 zero-mediated 的消融；
+- Q/K、V/O composed-operator 指标；
+- untouched C4/W2 与成本审计。
+
+### Appendix 可包含
+
+- binary/4-level specificity control；
+- second model；
+- 更大 beam width；
+- loss landscape slices；
+- 理论 lemma 的完整证明。
+
+### 明确不做
+
+- 不运行 A100 上的 full-model QAT 作为首轮条件；
+- 不做 projection mask 枚举；
+- 不事后调 barrier weight、epsilon、zero slack 或 checkpoint；
+- 不把 QAT teacher logits 或 latent weights 放入 strict TDBT；
+- 不因单个层成功就扩展全模型；
+- 不把 2-bit packing 直接写成 1.58 bpw。
+
+## 13. 最终检查清单
+
+- [ ] A1 证明了固定预算 QAT–PTQ gap
+- [ ] FP-FT + PTQ control 完成
+- [ ] QAT 使用固定 PTQ ternary grid
+- [ ] B1 证明或否定 path opportunity
+- [ ] endpoint-only 与 one-shot matched-budget 对照完成
+- [ ] zero-mediated 与 direct sign-flip 对照完成
+- [ ] barrier 不只在 calibration 上改善
+- [ ] Q/K、V/O composed-operator 指标完成
+- [ ] C1 gap closure 和成本 gate 完成
+- [ ] 所有 negative results、OOM、nonfinite 和 split 审计进入 tracker

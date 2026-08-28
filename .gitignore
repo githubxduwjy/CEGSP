@@ -1,0 +1,34 @@
+# Models, datasets, caches, and other large artifacts
+model/
+*.safetensors
+*.bin
+*.pt
+*.pth
+*.ckpt
+*.pdf
+results/
+data/
+checkpoints/
+outputs/
+
+# Local/runtime state
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.log
+.env
+.env.*
+.aris/
+autoresearch/.git/
+autoresearch/.venv/
+autoresearch/PTQ_AUTORESEARCH_STATE*.json
+autoresearch/ptq_results.tsv
+autoresearch/analysis.ipynb
+autoresearch/progress.png
+
+# Local migration snapshots and editor files
+migration_*/
+.idea/
+.vscode/
+*.swp

@@ -100,7 +100,10 @@ def set_module_weight(module: torch.nn.Module, weight: torch.Tensor) -> None:
 
 def snapshot_qk(model: torch.nn.Module, layers: Sequence[int]) -> Dict[int, Dict[str, torch.Tensor]]:
     return {
-        layer: {key: ref.module.weight.detach().float().cpu().clone() for key, ref in target_qk(model, layer).items()}
+        # Preserve the deployed dtype for the two snapshots.  Consumers cast
+        # to FP32 when doing arithmetic; keeping the snapshots in FP16/BF16
+        # avoids an unnecessary multi-GB host-memory allocation on 7B models.
+        layer: {key: ref.module.weight.detach().cpu().clone() for key, ref in target_qk(model, layer).items()}
         for layer in layers
     }
 
@@ -149,6 +152,7 @@ class Capture:
         self.modules: List[Dict[str, object]] = []
         self.active_ssr: object | None = None
         self.local_perms: List[torch.Tensor] = []
+        self.total_quantizer_calls = 0
 
     def reset_quantizer(self) -> None:
         self.initial_t = None
@@ -180,10 +184,13 @@ def install_capture(qmod: object, gptqmod: object, ssrmod: object, capture: Capt
         if ternary is None:
             raise RuntimeError("PT2 quantizer did not expose a ternary state")
         q_cpu = q.detach().float().cpu().clone()
-        t_cpu = ternary.detach().float().cpu().clone()
+        # T is a discrete index state; retain it compactly while the current
+        # PT2 module is being assembled.
+        t_cpu = ternary.detach().to(torch.int8).cpu().clone()
         if q_cpu.shape != t_cpu.shape:
             raise RuntimeError(f"quantizer state shape mismatch q={q_cpu.shape} T={t_cpu.shape}")
         capture.records.append({"q": q_cpu, "T": t_cpu})
+        capture.total_quantizer_calls += 1
         return q, placeholder_t
 
     def topk_capture(w_left, *args, **kwargs):
@@ -193,47 +200,53 @@ def install_capture(qmod: object, gptqmod: object, ssrmod: object, capture: Capt
         return result
 
     def regular_capture(self, *args, **kwargs):
-        start = len(capture.records)
+        # Keep only the current module's block captures.  The previous version
+        # retained q/T for all 224 modules and hit the 128 GiB cgroup limit.
+        capture.records = []
         result = original_regular_fasterquant(self, *args, **kwargs)
-        end = len(capture.records)
-        q_blocks = capture.records[start:end]
+        q_blocks = capture.records
         if not q_blocks:
             raise RuntimeError("regular PT2 module produced no quantizer records")
+        module_index = len(capture.modules)
+        is_target = module_index % 7 in (0, 2)
         q_cat = torch.cat([row["q"] for row in q_blocks], dim=1)
         t_cat = torch.cat([row["T"] for row in q_blocks], dim=1)
         columns = int(q_cat.shape[1])
         capture.modules.append({
-            "q": q_cat,
-            "T": t_cat,
+            "q": q_cat if is_target else None,
+            "T": t_cat if is_target else None,
             "perm": torch.arange(columns, dtype=torch.long),
             "ssr": False,
             "shape": [int(q_cat.shape[0]), columns],
         })
+        capture.records = []
         return result
 
     def ssr_capture(self, *args, **kwargs):
-        start = len(capture.records)
+        capture.records = []
         capture.active_ssr = self
         capture.local_perms = []
         try:
             result = original_ssr_fasterquant(self, *args, **kwargs)
         finally:
             capture.active_ssr = None
-        end = len(capture.records)
-        q_blocks = capture.records[start:end]
+        q_blocks = capture.records
         if not q_blocks:
             raise RuntimeError("SSR PT2 module produced no quantizer records")
         q_cat = torch.cat([row["q"] for row in q_blocks], dim=1)
         t_cat = torch.cat([row["T"] for row in q_blocks], dim=1)
         blocksize = int(kwargs.get("blocksize", group_size))
         perm = compose_ssr_perm(int(q_cat.shape[1]), blocksize, capture.local_perms)
+        module_index = len(capture.modules)
+        is_target = module_index % 7 in (0, 2)
         capture.modules.append({
-            "q": q_cat,
-            "T": t_cat,
+            "q": q_cat if is_target else None,
+            "T": t_cat if is_target else None,
             "perm": perm,
             "ssr": True,
             "shape": [int(q_cat.shape[0]), int(q_cat.shape[1])],
         })
+        capture.records = []
         return result
 
     qmod.ternary_init = init_capture
@@ -575,7 +588,7 @@ def main() -> None:
             "max_memory_gb_after_quant": torch.cuda.max_memory_allocated() / (1024**3),
         },
         "capture": {
-            "quantizer_calls": len(capture.records),
+            "quantizer_calls": capture.total_quantizer_calls,
             "module_calls": len(capture.modules),
             "expected_module_calls": len(module_specs(model)),
         },

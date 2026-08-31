@@ -208,13 +208,20 @@ def tokenize_text(tokenizer, text: str, n_batches: int, batch_size: int, seq_len
     ]
 
 
-def collect_texts(dataset_name: str, config: str | None, split: str, text_key: str, limit: int) -> Tuple[str, str]:
+def collect_texts(
+    dataset_name: str,
+    config: str | None,
+    split: str,
+    text_key: str,
+    limit: int,
+    streaming: bool = False,
+) -> Tuple[str, str]:
     from datasets import load_dataset
 
     if config:
-        ds = load_dataset(dataset_name, config, split=split)
+        ds = load_dataset(dataset_name, config, split=split, streaming=streaming)
     else:
-        ds = load_dataset(dataset_name, split=split)
+        ds = load_dataset(dataset_name, split=split, streaming=streaming)
     chunks: List[str] = []
     for row in ds:
         text = str(row.get(text_key, "")).strip()
@@ -237,7 +244,12 @@ def build_splits(tokenizer, seq_len: int, batch_size: int, fit_batches: int, val
     c4_text = ""
     if c4_batches > 0:
         try:
-            c4_text, c4_src = collect_texts("allenai/c4", "en", "validation", "text", 8000)
+            # C4 is intentionally streamed and bounded.  A non-streaming
+            # validation load can materialize hundreds of shards before the
+            # evaluator needs only a few thousand tokens.
+            c4_text, c4_src = collect_texts(
+                "allenai/c4", "en", "validation", "text", 8000, streaming=True
+            )
             source["c4"] = c4_src
         except Exception as exc:
             source["c4"] = f"deterministic-fallback:{type(exc).__name__}:{exc}"

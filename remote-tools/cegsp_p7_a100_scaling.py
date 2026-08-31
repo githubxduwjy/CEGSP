@@ -234,17 +234,21 @@ def build_splits(tokenizer, seq_len: int, batch_size: int, fit_batches: int, val
         source = {"wikitext": f"deterministic-fallback:{type(exc).__name__}:{exc}"}
         train_text = ("CEGSP evaluates ternary support relocation from quantized point gradients. ") * 20000
         valid_text = ("Untouched validation text is deterministic fallback and cannot support a paper claim. ") * 10000
-    try:
-        c4_text, c4_src = collect_texts("allenai/c4", "en", "validation", "text", 8000)
-        source["c4"] = c4_src
-    except Exception as exc:
-        source["c4"] = f"deterministic-fallback:{type(exc).__name__}:{exc}"
-        c4_text = ("C4 fallback text is only for harness validation, not for evidence claims. ") * 10000
+    c4_text = ""
+    if c4_batches > 0:
+        try:
+            c4_text, c4_src = collect_texts("allenai/c4", "en", "validation", "text", 8000)
+            source["c4"] = c4_src
+        except Exception as exc:
+            source["c4"] = f"deterministic-fallback:{type(exc).__name__}:{exc}"
+            c4_text = ("C4 fallback text is only for harness validation, not for evidence claims. ") * 10000
+    else:
+        source["c4"] = "skipped"
     fit = tokenize_text(tokenizer, train_text, fit_batches, batch_size, seq_len, offset)
     val = tokenize_text(tokenizer, valid_text, val_batches, batch_size, seq_len, offset)
     untouched_offset = offset + val_batches * batch_size * (seq_len + 1)
     w2 = tokenize_text(tokenizer, valid_text, w2_batches, batch_size, seq_len, untouched_offset)
-    c4 = tokenize_text(tokenizer, c4_text, c4_batches, batch_size, seq_len, offset)
+    c4 = tokenize_text(tokenizer, c4_text, c4_batches, batch_size, seq_len, offset) if c4_batches > 0 else []
     return fit, val, w2, c4, source
 
 
@@ -262,11 +266,13 @@ def evaluate_nll(model: torch.nn.Module, device: torch.device, batches: Iterable
 
 def eval_metrics(model, device, val, w2, c4) -> Dict[str, float]:
     model.eval()
-    return {
+    metrics = {
         "val": evaluate_nll(model, device, val),
         "wikitext2_untouched": evaluate_nll(model, device, w2),
-        "c4_untouched": evaluate_nll(model, device, c4),
     }
+    if c4:
+        metrics["c4_untouched"] = evaluate_nll(model, device, c4)
+    return metrics
 
 
 def collect_grads(model, fit, layers: Sequence[int], device: torch.device, grad_batches: int) -> Dict[int, Dict[str, torch.Tensor]]:

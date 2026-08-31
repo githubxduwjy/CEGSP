@@ -109,3 +109,25 @@ unhealthy PT² checkpoint, QAT-gap closure, or broad downstream accuracy. The
 external result-to-claim reviewer was unavailable after the required fallback
 attempt, so the formal claim verdict remains `REVIEW_UNAVAILABLE`; the numbers
 above are mechanically verified local evidence, not an external acquittal.
+
+## 2026-08-31 — P9-S0 official PT² Llama-2-7B health audit
+
+P9-S0 ran the official PT² repository (`9e943e68`) on Llama-2-7B using the
+author-domain `ATQ+SSR` protocol: Wikitext-2 calibration, `nsamples=128`,
+`blocksize=128`, `calib_seqlen=2048`, `ppl_seqlen=2048`, `percdamp=0.01`,
+`num_p=1`, and Hessian saliency. CEGSP was not called. A symlink named
+`/root/Llama-2-7b-hf` was created only so the official path-name based Llama
+branch would trigger for the uploaded model at `/CEGSP/model`.
+
+The run completed on an A100 with quantization time `1419.1s`, official
+Wikitext-2 PPL `11.6425`, and official C4 PPL `24.3239`. It saved a 13.5GB
+fake-quantized Hugging Face checkpoint with three safetensors shards. A shallow
+state audit checked 291 saved tensors: all were finite, with max absolute value
+`10.953125`.
+
+Interpretation: the previous OPT-350M PT² numerical-health failure should not be
+generalized to the official Llama-2-7B setting. This run is healthy enough to
+justify a separate, frozen `PT² -> PT²+CEGSP` compatibility test. It does not
+itself support any CEGSP-over-PT² performance claim. The external
+result-to-claim reviewer remains unavailable, so this is a deterministic local
+audit result only.

@@ -86,3 +86,26 @@ P6-B repeated the frozen P6-A protocol at three preregistered seed/offset pairs:
 The directionality gate passed in all 6 representation-replicate cells. Centered validation rho was `0.6897 +/- 0.0307` and affine validation rho was `0.7369 +/- 0.0206`; mean `Delta_rank` was `-0.005406 +/- 0.000222` and `-0.006118 +/- 0.000230`, respectively. Top-20% validation improvement rates were 1.000, 1.000, 1.000 for centered and 1.000, 1.000, 0.947 for affine. The affine random untouched-W2 improvement rate varied from `0.104` to `0.875`, so the P6-A split bias does not repeat as a universal effect.
 
 This establishes `STABLE_SUPPORT_SCORE_VALIDITY`: quantized-point CE scores consistently rank useful legal ternary support relocations across fixed seed/offset changes and both centered/affine representations. It remains a mechanism result, not evidence of strong-PTQ superiority, final whole-model PPL improvement, QAT-gap closure, or large-model scaling. The score-validity branch should now stop; the next experiment should test fixed-budget high-score/random/low-score whole-model composition consistency.
+
+## 2026-08-31 — P7-R large-model held-out robustness
+
+P7-R re-evaluated the already frozen affine top-6 CEGSP rule on larger
+Wikitext-2 and bounded streamed C4 slices for Llama-2-7B and Qwen3-8B. Both
+runs completed on an A100 with finite metrics, real dataset sources, zero
+illegal ternary states, zero codebook residual, unchanged support cardinality,
+384 legal relocations, and 768 changed coordinates.
+
+Relative to the affine ternary baseline, CEGSP changed untouched NLL by
+Llama W2/C4 `-0.070668/-0.165023` and Qwen W2/C4 `-0.067203/-0.096392`.
+Matched random controls changed them by Llama `+0.000650/-0.003523` and
+Qwen `+0.000465/-0.003602`. Thus the pre-registered strong cross-domain
+scaling gate passes for both model families: CEGSP improves both holdouts and
+beats the matched random control on both.
+
+Supported boundary: frozen affine CEGSP transfers a non-random, cross-domain
+NLL improvement from the Wikitext fit split to these Llama/Qwen large-model
+holdouts. This does not establish SOTA ternary PTQ, compatibility with the
+unhealthy PT² checkpoint, QAT-gap closure, or broad downstream accuracy. The
+external result-to-claim reviewer was unavailable after the required fallback
+attempt, so the formal claim verdict remains `REVIEW_UNAVAILABLE`; the numbers
+above are mechanically verified local evidence, not an external acquittal.

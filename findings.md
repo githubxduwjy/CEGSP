@@ -1,5 +1,31 @@
 # Research Findings
 
+## 2026-09-01 — P9-D1 residual discrete landscape
+
+### Review status
+
+The external result-to-claim reviewer was unavailable/rejected in this
+session. The following is a deterministic result record only; it does not
+upgrade a paper claim.
+
+### Finding
+
+P9-D1 compared ordinary affine and detached official PT² ATQ+SSR
+initializers using 512 single legal relocations per initializer across all 32
+Llama-2-7B Q/K layers. All 1024 candidates were finite and legal. On untouched
+Wikitext-2, ordinary-affine ranked moves had mean NLL delta `-0.00050481` and
+68.36% beneficial density; PT² ranked moves had `+0.00051314` and 32.42%.
+The W2 Spearman correlations were weak for both ordinary affine (`0.12837`)
+and PT² (`0.11093`), so the run does not isolate a PT²-specific QGP ranking
+collapse. PT² improved the compact validation slice but not untouched W2.
+
+### Routing
+
+The evidence is most consistent with a qualified residual-depletion finding:
+optimized PT² leaves little transferable residual in the current CEGSP move
+space. The precondition for P9-D2 was not met, so no composition diagnostic,
+budget sweep, or canonical-rule change was run. P9 is closed at D1.
+
 ## 2026-08-22 — Validation-gated discrete ternary refinement
 
 ### Verdict

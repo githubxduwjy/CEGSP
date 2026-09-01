@@ -20,6 +20,8 @@ ternary PTQ baseline is healthy or that CEGSP already dominates PT².
 - `env/` — validated Python/CUDA dependency specification and smoke test.
 - `refine-logs/` — experiment plans and analysis notes; large raw results and
   model weights are intentionally excluded from Git.
+- `MIGRATION_4090.md` — 4090 migration instructions, reusable entry points,
+  and the detached PT2 sidecar contract.
 
 ## Quick start
 

@@ -4,8 +4,8 @@
 This is deliberately a screening evaluator, not a new optimization stage.  It
 reconstructs the already frozen P7 top-6 affine CEGSP rule from the Wikitext
 fit split, then evaluates BF16, affine ternary, and affine+CEGSP on fixed
-validation examples from PIQA and ARC-Easy.  Downstream examples never enter
-layer or edit selection.
+validation examples from multiple-choice downstream tasks.  Downstream examples
+never enter layer or edit selection.
 """
 
 from __future__ import annotations
@@ -40,11 +40,22 @@ def log(msg: str) -> None:
 
 
 def parse_tasks(text: str) -> List[str]:
-    allowed = {"piqa", "arc_easy"}
-    tasks = [x.strip() for x in text.split(",") if x.strip()]
+    allowed = {"hellaswag", "piqa", "arc_easy", "arc_challenge", "winogrande", "mmlu"}
+    aliases = {
+        "all": ["hellaswag", "piqa", "arc_easy", "arc_challenge", "winogrande", "mmlu"],
+        "all6": ["hellaswag", "piqa", "arc_easy", "arc_challenge", "winogrande", "mmlu"],
+    }
+    raw = [x.strip() for x in text.split(",") if x.strip()]
+    tasks: List[str] = []
+    for item in raw:
+        tasks.extend(aliases.get(item, [item]))
     if not tasks or any(x not in allowed for x in tasks):
         raise ValueError(f"tasks must be a non-empty subset of {sorted(allowed)}")
-    return tasks
+    deduped: List[str] = []
+    for task in tasks:
+        if task not in deduped:
+            deduped.append(task)
+    return deduped
 
 
 def load_task_examples(tasks: Sequence[str], max_examples: int) -> Dict[str, List[Dict[str, object]]]:
@@ -52,7 +63,23 @@ def load_task_examples(tasks: Sequence[str], max_examples: int) -> Dict[str, Lis
 
     out: Dict[str, List[Dict[str, object]]] = {}
     for task in tasks:
-        if task == "piqa":
+        if task == "hellaswag":
+            ds = load_dataset("hellaswag", split="validation")
+            rows: List[Dict[str, object]] = []
+            for row in ds:
+                ctx = (str(row.get("ctx_a", "")).strip() + " " + str(row.get("ctx_b", "")).strip()).strip()
+                rows.append(
+                    {
+                        "id": str(row.get("ind", len(rows))),
+                        "prefix": ctx + " ",
+                        "options": [str(x).strip() for x in row["endings"]],
+                        "label": int(row["label"]),
+                    }
+                )
+                if len(rows) >= max_examples:
+                    break
+            out[task] = rows
+        elif task == "piqa":
             ds = load_dataset("piqa", split="validation")
             rows: List[Dict[str, object]] = []
             for row in ds:
@@ -68,8 +95,9 @@ def load_task_examples(tasks: Sequence[str], max_examples: int) -> Dict[str, Lis
                 if len(rows) >= max_examples:
                     break
             out[task] = rows
-        elif task == "arc_easy":
-            ds = load_dataset("allenai/ai2_arc", "ARC-Easy", split="validation")
+        elif task in {"arc_easy", "arc_challenge"}:
+            config = "ARC-Easy" if task == "arc_easy" else "ARC-Challenge"
+            ds = load_dataset("allenai/ai2_arc", config, split="validation")
             rows = []
             for row in ds:
                 choices = row["choices"]
@@ -90,6 +118,55 @@ def load_task_examples(tasks: Sequence[str], max_examples: int) -> Dict[str, Lis
                 )
                 if len(rows) >= max_examples:
                     break
+            out[task] = rows
+        elif task == "winogrande":
+            ds = load_dataset("winogrande", "winogrande_xl", split="validation")
+            rows = []
+            for row in ds:
+                sentence = str(row["sentence"])
+                before, sep, after = sentence.partition("_")
+                if not sep:
+                    before, after = sentence + " ", ""
+                rows.append(
+                    {
+                        "id": str(row.get("qID", len(rows))),
+                        "prefix": before,
+                        "options": [
+                            str(row["option1"]).strip() + after,
+                            str(row["option2"]).strip() + after,
+                        ],
+                        "label": int(row["answer"]) - 1,
+                    }
+                )
+                if len(rows) >= max_examples:
+                    break
+            out[task] = rows
+        elif task == "mmlu":
+            errors = []
+            rows = []
+            for dataset_name, config, split in (
+                ("cais/mmlu", "all", "test"),
+                ("cais/mmlu", "all", "validation"),
+                ("lukaemon/mmlu", "all", "test"),
+            ):
+                try:
+                    ds = load_dataset(dataset_name, config, split=split)
+                    for row in ds:
+                        rows.append(
+                            {
+                                "id": str(row.get("id", len(rows))),
+                                "prefix": str(row["question"]).strip() + "\nAnswer:\n",
+                                "options": [str(x).strip() for x in row["choices"]],
+                                "label": int(row["answer"]),
+                            }
+                        )
+                        if len(rows) >= max_examples:
+                            break
+                    break
+                except Exception as exc:  # pragma: no cover - depends on remote dataset cache.
+                    errors.append(f"{dataset_name}/{config}/{split}: {type(exc).__name__}: {exc}")
+            if not rows:
+                raise RuntimeError("could not load MMLU from known dataset aliases: " + " | ".join(errors))
             out[task] = rows
     if any(not out[task] for task in tasks):
         raise RuntimeError("one or more downstream tasks yielded zero examples")
@@ -284,8 +361,12 @@ def main() -> None:
         "data_source": {
             "fit": fit_source,
             "downstream": {
+                "hellaswag": "hellaswag:validation",
                 "piqa": "piqa:validation",
                 "arc_easy": "allenai/ai2_arc:ARC-Easy:validation",
+                "arc_challenge": "allenai/ai2_arc:ARC-Challenge:validation",
+                "winogrande": "winogrande:winogrande_xl:validation",
+                "mmlu": "cais/mmlu:all:test preferred; fallbacks documented on load failure",
             },
         },
         "protocol": {

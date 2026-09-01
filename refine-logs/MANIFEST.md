@@ -81,5 +81,7 @@
 | 2026-09-01 | `EXPERIMENT_PLAN_CEGSP_P9D1_RESIDUAL_LANDSCAPE_20260901.md` | P9-D1 预注册：ordinary affine 与真实 PT² 初始化的单步残差离散景观诊断 |
 | 2026-09-01 | `EXPERIMENT_ANALYSIS_CEGSP_P9D1_RESIDUAL_LANDSCAPE_20260901.md` | P9-D1 原始结果与完整性分析：PT² 后 W2 可利用残差减少；rho 对两种 initializer 均偏弱，不触发 D2 |
 | 2026-09-01 | `results/remote-runs/cegsp_p9d1_residual_landscape_llama2_7b_a100_20260901_42028/p9d1_result.json` | A100 P9-D1 1024 个单步 candidate 的原始 JSON 结果 |
+| 2026-09-01 | `EXPERIMENT_PLAN_CEGSP_P8A_ONLY_PREP_20260901.md` | P8-only downstream 准备协议：六任务 screen、冻结规则、42079 服务器启动前 gate |
+| 2026-09-01 | `remote-tools/run_p8a_downstream.sh` | P8-only 远端 check/launch wrapper；默认 check，不自动启动正式实验 |
 | 2026-08-27 | `results/remote-runs/CEGSP-12A-OFFICIAL-OPT350M/result.json` | CEGSP-12A 官方 ATQ/ATQ+SSR 聚合配置与结果 |
 | 2026-08-27 | `results/remote-runs/CEGSP-12A-FP16-CLEAN-OPT350M/result.json` | 官方数据/evaluator 下的干净 FP16 reference |

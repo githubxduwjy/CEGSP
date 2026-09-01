@@ -47,6 +47,8 @@ Git. Their recorded sizes are approximately 2.22 GB (`ternary_state.pt`),
 4090 machine only when a reviewed diagnostic explicitly needs them. The
 source run directory and exact paths are in `metadata.json` and
 `p9s2_result.json`.
+The small portable manifest is tracked at
+`migration/P9S2_SIDECAR_MANIFEST.json`.
 
 ## Suggested 4090 layout
 
@@ -63,4 +65,3 @@ For every run, record the model revision, tokenizer, split/offset, sequence
 length, seed, GPU name, CUDA/PyTorch versions, and the exact command in the
 result JSON. Never use untouched evaluation data to select layers, budgets,
 thresholds, or candidates.
-

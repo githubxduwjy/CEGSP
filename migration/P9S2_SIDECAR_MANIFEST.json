@@ -1,0 +1,37 @@
+{
+  "format": "CEGSP_P9S2_SIDECAR_MANIFEST_V1",
+  "run_id": "cegsp_p9s2_detached_pt2_llama2_7b_plugin_a100_20260901_42071_retry1",
+  "model": "Llama-2-7b-hf",
+  "source_host": "xj-member.bitahub.com",
+  "source_port": 42028,
+  "source_dir": "/root/tqgsp-runs/cegsp_p9s2_detached_pt2_llama2_7b_plugin_a100_20260901_42071_retry1/pt2_llama7b_sidecar",
+  "artifacts": [
+    {
+      "relative_path": "ternary_state.pt",
+      "bytes": 2216782730,
+      "role": "real T, mu, alpha, valid masks, group metadata, and SSR permutations"
+    },
+    {
+      "relative_path": "fp_qk.pt",
+      "bytes": 2147497358,
+      "role": "FP Q/K snapshot for receiver-sign and candidate diagnostics"
+    },
+    {
+      "relative_path": "model/qk_checkpoint.pt",
+      "bytes": 2147501998,
+      "role": "deployed PT2 Q/K checkpoint"
+    }
+  ],
+  "config": {
+    "group_size": 128,
+    "nsamples": 128,
+    "calib_seq_len": 2048,
+    "ppl_seq_len": 2048,
+    "threshold_factor": 0.75,
+    "edits_per_layer": 64,
+    "primary_layer_budget": 6,
+    "qk_modules": 64,
+    "seed": 0
+  },
+  "note": "Binary artifacts are intentionally excluded from Git. Use the local results metadata or a reviewed rsync/scp transfer before any diagnostic run. Do not use untouched evaluation data for selection."
+}

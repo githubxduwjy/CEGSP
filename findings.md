@@ -157,3 +157,22 @@ justify a separate, frozen `PT² -> PT²+CEGSP` compatibility test. It does not
 itself support any CEGSP-over-PT² performance claim. The external
 result-to-claim reviewer remains unavailable, so this is a deterministic local
 audit result only.
+
+## 2026-09-01 — P8-A six-task downstream screen
+
+P8-A evaluated the frozen affine CEGSP/TernRefine rule on Llama-2-7B and
+Qwen3-8B across HellaSwag, PIQA, ARC-Easy, ARC-Challenge, WinoGrande, and
+MMLU with 128 examples per task. The run used BF16, ordinary affine ternary,
+and affine+CEGSP states; downstream examples were not used for edit selection.
+
+Qwen3-8B passed the bounded screen: macro gold normalized log-likelihood score
+improved by `+0.098879`, macro margin by `+0.042852`, and macro accuracy by
+`+0.009115`; 4/6 tasks improved on the primary continuous score. Llama-2-7B was
+borderline: macro gold score improved by only `+0.011887`, while macro accuracy
+fell by `-0.023438` and macro margin by `-0.037585`; only 2/6 tasks improved on
+the primary score.
+
+This supports a cautious downstream-signal statement, especially for Qwen3-8B,
+but not a broad downstream accuracy claim. The result should be treated as a
+mixed screen and paired with the stronger P7-R NLL evidence, not used to tune
+the frozen rule.

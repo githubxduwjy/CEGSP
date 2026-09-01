@@ -81,9 +81,9 @@ Before launching, confirm:
   `lm_eval` unavailable.
 - Llama check: passed for `/root/Llama-2-7b-hf`.
 - Qwen check: blocked until the real Qwen3-8B path is provided.
-- Dataset preflight: HellaSwag, ARC-Easy, ARC-Challenge, and MMLU loaded one
-  sample successfully. PIQA and WinoGrande require `trust_remote_code=True`;
-  the P8 loader was updated accordingly.
+- Dataset preflight: after adding `trust_remote_code=True` for PIQA and
+  WinoGrande, all six tasks loaded one sample successfully on 42079:
+  HellaSwag, PIQA, ARC-Easy, ARC-Challenge, WinoGrande, and MMLU.
 
 ## Success Criterion
 

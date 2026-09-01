@@ -34,10 +34,16 @@ bash remote-tools/run_p8a_downstream.sh check llama
 bash remote-tools/run_p8a_downstream.sh launch llama
 ```
 
-If Qwen3-8B exists at a non-default location, set it explicitly:
+On the 42079 server, Qwen3-8B is stored at:
 
 ```bash
-export QWEN_MODEL_PATH=/path/to/Qwen3-8B
+/model/bitahub-model/pice35408784b54431987c4d13c457b9cd/Qwen3-8B
+```
+
+Set it explicitly before running the Qwen half:
+
+```bash
+export QWEN_MODEL_PATH=/model/bitahub-model/pice35408784b54431987c4d13c457b9cd/Qwen3-8B
 bash remote-tools/run_p8a_downstream.sh check qwen
 bash remote-tools/run_p8a_downstream.sh launch qwen
 ```
@@ -67,8 +73,7 @@ Before launching, confirm:
 - the A100 is idle or intentionally allocated to P8;
 - `/root/Llama-2-7b-hf` resolves to the intended Llama-2-7B checkpoint;
 - Qwen3-8B path is known before running the Qwen half. On the 42079 server,
-  `/root/Qwen3-8B` was not present during preparation, so the Qwen launch must
-  set `QWEN_MODEL_PATH`;
+  use `/model/bitahub-model/pice35408784b54431987c4d13c457b9cd/Qwen3-8B`;
 - `bash remote-tools/run_p8a_downstream.sh check llama` passes;
 - for Qwen, `QWEN_MODEL_PATH=... bash remote-tools/run_p8a_downstream.sh check qwen` passes;
 - no task, edit budget, layer budget, threshold, sign rule, or calibration
@@ -80,7 +85,8 @@ Before launching, confirm:
 - Python package check: `torch`, `transformers`, and `datasets` available;
   `lm_eval` unavailable.
 - Llama check: passed for `/root/Llama-2-7b-hf`.
-- Qwen check: blocked until the real Qwen3-8B path is provided.
+- Qwen check: passed with
+  `/model/bitahub-model/pice35408784b54431987c4d13c457b9cd/Qwen3-8B`.
 - Dataset preflight: after adding `trust_remote_code=True` for PIQA and
   WinoGrande, all six tasks loaded one sample successfully on 42079:
   HellaSwag, PIQA, ARC-Easy, ARC-Challenge, WinoGrande, and MMLU.

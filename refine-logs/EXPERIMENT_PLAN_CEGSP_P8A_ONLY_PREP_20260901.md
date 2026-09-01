@@ -66,11 +66,24 @@ Before launching, confirm:
 
 - the A100 is idle or intentionally allocated to P8;
 - `/root/Llama-2-7b-hf` resolves to the intended Llama-2-7B checkpoint;
-- Qwen3-8B path is known before running the Qwen half;
+- Qwen3-8B path is known before running the Qwen half. On the 42079 server,
+  `/root/Qwen3-8B` was not present during preparation, so the Qwen launch must
+  set `QWEN_MODEL_PATH`;
 - `bash remote-tools/run_p8a_downstream.sh check llama` passes;
 - for Qwen, `QWEN_MODEL_PATH=... bash remote-tools/run_p8a_downstream.sh check qwen` passes;
 - no task, edit budget, layer budget, threshold, sign rule, or calibration
   split is changed based on early downstream results.
+
+## 42079 Preparation Notes
+
+- A100 check: `NVIDIA A100-SXM4-80GB`, 0 MiB used at preparation time.
+- Python package check: `torch`, `transformers`, and `datasets` available;
+  `lm_eval` unavailable.
+- Llama check: passed for `/root/Llama-2-7b-hf`.
+- Qwen check: blocked until the real Qwen3-8B path is provided.
+- Dataset preflight: HellaSwag, ARC-Easy, ARC-Challenge, and MMLU loaded one
+  sample successfully. PIQA and WinoGrande require `trust_remote_code=True`;
+  the P8 loader was updated accordingly.
 
 ## Success Criterion
 

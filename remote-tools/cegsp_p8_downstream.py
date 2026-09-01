@@ -80,7 +80,7 @@ def load_task_examples(tasks: Sequence[str], max_examples: int) -> Dict[str, Lis
                     break
             out[task] = rows
         elif task == "piqa":
-            ds = load_dataset("piqa", split="validation")
+            ds = load_dataset("piqa", split="validation", trust_remote_code=True)
             rows: List[Dict[str, object]] = []
             for row in ds:
                 label = int(row["label"])
@@ -120,7 +120,7 @@ def load_task_examples(tasks: Sequence[str], max_examples: int) -> Dict[str, Lis
                     break
             out[task] = rows
         elif task == "winogrande":
-            ds = load_dataset("winogrande", "winogrande_xl", split="validation")
+            ds = load_dataset("winogrande", "winogrande_xl", split="validation", trust_remote_code=True)
             rows = []
             for row in ds:
                 sentence = str(row["sentence"])

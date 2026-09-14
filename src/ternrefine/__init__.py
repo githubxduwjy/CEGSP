@@ -1,6 +1,6 @@
 """Core utilities for TernRefine.
 
-The executable experiment runners live in ``remote-tools``. This package keeps
+The executable representative examples live in ``examples``. This package keeps
 the paper-level CPSR/QGP/APG primitives in a small importable form.
 """
 

@@ -29,8 +29,8 @@ import numpy as np
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, set_seed
 
-from cegsp_ce_gradient_4090 import collect_ce_qk_grads
-from cegsp_p11_p12_4090 import (
+from _support.ce_gradient import collect_ce_qk_grads
+from _support.task_vs_reconstruction import (
     LAYERS,
     build_c4_cached_batches,
     changed_coordinates,
@@ -39,7 +39,7 @@ from cegsp_p11_p12_4090 import (
     metric_delta,
     reconstruction_score,
 )
-from cegsp_p5a_affine_adapter_feasibility_4090 import (
+from _support.affine_adapter import (
     AffineCode,
     AffineEdit,
     apply_affine_patch,
@@ -52,7 +52,7 @@ from cegsp_p5a_affine_adapter_feasibility_4090 import (
     snapshot_qk,
     with_ppl,
 )
-from tqgsp_support_projection_4090 import evaluate_nll, log, parse_csv_ints, read_wikitext_arrow_cache
+from _support.data_eval import evaluate_nll, log, parse_csv_ints, read_wikitext_arrow_cache
 
 
 def parse_args() -> argparse.Namespace:

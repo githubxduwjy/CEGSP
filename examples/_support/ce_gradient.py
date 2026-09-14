@@ -20,7 +20,7 @@ import torch
 import torch.nn.functional as F
 from transformers import AutoModelForCausalLM, AutoTokenizer, set_seed
 
-from tqgsp_support_projection_4090 import (
+from _support.data_eval import (
     MATRIX_KEYS,
     apply_direct_ptq_local,
     build_wikitext_splits,

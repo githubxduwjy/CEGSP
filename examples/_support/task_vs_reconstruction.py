@@ -27,8 +27,8 @@ import numpy as np
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, set_seed
 
-from cegsp_ce_gradient_4090 import collect_ce_qk_grads
-from cegsp_p5a_affine_adapter_feasibility_4090 import (
+from _support.ce_gradient import collect_ce_qk_grads
+from _support.affine_adapter import (
     AffineCode,
     AffineEdit,
     apply_affine_patch,
@@ -42,7 +42,7 @@ from cegsp_p5a_affine_adapter_feasibility_4090 import (
     snapshot_qk,
     with_ppl,
 )
-from tqgsp_support_projection_4090 import build_wikitext_splits, log, parse_csv_ints
+from _support.data_eval import build_wikitext_splits, log, parse_csv_ints
 
 
 LAYERS = list(range(24))
@@ -287,7 +287,7 @@ def main() -> None:
     torch.backends.cuda.matmul.allow_tf32 = True
     torch.backends.cudnn.allow_tf32 = True
     if not torch.cuda.is_available():
-        raise RuntimeError("P11/P12 requires CUDA; expected RTX 4090")
+        raise RuntimeError("this mechanism runner requires one CUDA device")
     if torch.cuda.device_count() < 1:
         raise RuntimeError("no CUDA device available")
     device = torch.device("cuda")
@@ -602,7 +602,7 @@ def main() -> None:
                 "task_better_w2": nll("hba_task", "wikitext2_untouched") < nll("reconstruction_hba", "wikitext2_untouched"),
                 "task_better_c4": nll("hba_task", "c4_untouched") < nll("reconstruction_hba", "c4_untouched"),
             },
-            "requant_status": "not_run_no_clean_reference_implementation",
+            "external_reconstruction_baseline_status": "not_run_in_this_anonymous_artifact",
         },
         "timing": {**timing, "total_sec": elapsed},
         "gate": {

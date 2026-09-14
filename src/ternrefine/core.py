@@ -1,8 +1,8 @@
 """Minimal CPSR/QGP/APG primitives.
 
 The functions here are intentionally tensor-light and independent of a specific
-model architecture. The larger experiment scripts adapt these primitives to
-OPT, Llama, Qwen, affine ternary states, and PT2 sidecars.
+model architecture. The representative examples adapt these primitives to
+OPT/Llama affine ternary states and PT2 sidecars.
 """
 
 from __future__ import annotations

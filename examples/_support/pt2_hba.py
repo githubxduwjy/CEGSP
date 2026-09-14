@@ -25,7 +25,7 @@ from typing import Any, Dict, Iterable, List, Sequence
 import torch
 from transformers import AutoModelForCausalLM, set_seed
 
-from cegsp_p7_a100_scaling import (
+from _support.large_model_affine import (
     AffineEdit,
     audit_all,
     build_top_candidates,
@@ -36,7 +36,7 @@ from cegsp_p7_a100_scaling import (
     metric_delta,
     target_qk,
 )
-from cegsp_p9s2_detached_pt2_plugin import (
+from _support.pt2_sidecar import (
     apply_ssr_codes,
     cardinality_violations,
     detached_reload_gate,

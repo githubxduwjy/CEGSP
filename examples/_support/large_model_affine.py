@@ -2,8 +2,8 @@
 """P7: A100 smoke and 7B/8B frozen-canonical affine CEGSP scaling.
 
 This script keeps the P5-B affine CEGSP rule intact while replacing the
-OPT-only adapter with a generic Q/K projection adapter for OPT, Llama-family,
-and Qwen-family decoder blocks.
+OPT-only adapter with a generic Q/K projection adapter for common decoder-only
+transformer blocks.
 """
 
 from __future__ import annotations

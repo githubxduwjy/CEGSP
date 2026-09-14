@@ -25,7 +25,7 @@ from typing import Dict, List, Sequence, Tuple
 import torch
 from transformers import set_seed
 
-from cegsp_p7_a100_scaling import (
+from _support.large_model_affine import (
     AffineCode,
     AffineEdit,
     audit_all,
@@ -568,14 +568,7 @@ def official_metrics(model: torch.nn.Module, model_path: str, device: torch.devi
     evaluator = importlib.import_module("pt2_llm.eval_ppl")
     _, w2_test = data.get_loaders("wikitext2", seed=0, seqlen=seqlen, model=model_path)
     _, c4_test = data.get_loaders("c4", seed=0, seqlen=seqlen, model=model_path)
-    # PT2 provides a separate evaluator for Qwen-style decoder interfaces.
-    # Calling llama_eval for Qwen can yield invalid PPL and also leaves the
-    # model layerwise-offloaded on CPU for a later gradient pass.
-    model_type = str(getattr(getattr(model, "config", None), "model_type", "")).lower()
-    is_qwen = "qwen" in model_type or "qwen" in str(model_path).lower()
-    eval_fn = getattr(evaluator, "qwen_eval", None) if is_qwen else None
-    if eval_fn is None:
-        eval_fn = evaluator.llama_eval
+    eval_fn = evaluator.llama_eval
     w2 = float(eval_fn(model, w2_test, device, "wikitext2", False, seqlen))
     c4 = float(eval_fn(model, c4_test, device, "c4", False, seqlen))
     result = {"wikitext2_ppl": w2, "c4_ppl": c4}

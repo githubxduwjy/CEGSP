@@ -29,7 +29,7 @@ from typing import Any, Dict, Iterable, List, Sequence, Tuple
 import torch
 from transformers import set_seed
 
-from cegsp_p7_a100_scaling import (
+from _support.large_model_affine import (
     AffineEdit,
     audit_all,
     build_top_candidates,
@@ -39,7 +39,7 @@ from cegsp_p7_a100_scaling import (
     get_decoder_layers,
     metric_delta,
 )
-from cegsp_p9s2_detached_pt2_plugin import (
+from _support.pt2_sidecar import (
     apply_ssr_codes,
     cardinality_violations,
     finite_metrics,
@@ -47,7 +47,7 @@ from cegsp_p9s2_detached_pt2_plugin import (
     official_metrics,
     restore_qk,
 )
-from cegsp_pt2_hba_detached_a100 import (
+from _support.pt2_hba import (
     GRID,
     apply_edit_list,
     candidate_manifest,
@@ -103,6 +103,7 @@ def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser()
     p.add_argument("--model", default="/root/Llama-2-7b-hf")
     p.add_argument("--sidecar-dir", required=True)
+    p.add_argument("--pt2-checkpoint", default="", help="Load an existing CEGSP full PT2 checkpoint and skip official quant_sequential rebuild.")
     p.add_argument("--reference-json", required=True)
     p.add_argument("--run-id", required=True)
     p.add_argument("--out-dir", default="/root/tqgsp-runs")
@@ -505,10 +506,21 @@ def main() -> None:
     if len(calib_loader) != args.calib_nsamples:
         raise RuntimeError(f"calibration sample mismatch {len(calib_loader)} != {args.calib_nsamples}")
 
-    log(f"rebuilding official PT2 deployment once on {torch.cuda.get_device_name(0)}; baseline evaluation skipped")
     model = pt2_quantize.get_model(args.model, args.calib_seq_len)
     model.seqlen = args.calib_seq_len
-    pt2_quantize.quant_sequential(model, calib_loader, "cuda:0")
+    if args.pt2_checkpoint:
+        from _support.artifact_state import load_full_pt2_state
+
+        ckpt_path = Path(args.pt2_checkpoint)
+        if not ckpt_path.exists():
+            raise RuntimeError(f"PT2 checkpoint does not exist: {ckpt_path}")
+        log(f"loading frozen PT2 deployment from {ckpt_path}; quant_sequential skipped")
+        model.to(device)
+        load_info = load_full_pt2_state(model, ckpt_path)
+        log(json.dumps({"pt2_checkpoint_load": load_info}, ensure_ascii=False))
+    else:
+        log(f"rebuilding official PT2 deployment once on {torch.cuda.get_device_name(0)}; baseline evaluation skipped")
+        pt2_quantize.quant_sequential(model, calib_loader, "cuda:0")
     ensure_model_on_device(model, device)
     if len(get_decoder_layers(model)) != 32:
         raise RuntimeError(f"model decoder depth mismatch: {len(get_decoder_layers(model))}")
@@ -665,7 +677,7 @@ def main() -> None:
         },
         "timing": {
             "total_sec": time.time() - started,
-            "note": "The PT2 deployment is rebuilt once and reused. Replicate HBA curves are sequential because each has its own first-non-improvement stopping rule.",
+            "note": "The PT2 deployment is loaded from a frozen checkpoint when --pt2-checkpoint is provided; otherwise it is rebuilt once. Replicate HBA curves are sequential because each has its own first-non-improvement stopping rule.",
         },
     }
     (out / "pt2_hba_replication_result.json").write_text(json.dumps(result, indent=2, ensure_ascii=False), encoding="utf-8")

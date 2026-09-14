@@ -321,8 +321,12 @@ def run_one_replicate(
     (rep_dir / "ranking_manifest.json").write_text(json.dumps(ranking_manifest, indent=2), encoding="utf-8")
 
     hba_rows: List[Dict[str, Any]] = []
-    previous_val = None
-    selected_k = None
+    baseline_row = row_for_patch(model, device, codes, perms, base_hash, [], val_batches, 0)
+    hba_rows.append(baseline_row)
+    restore_qk(model, qk_checkpoint)
+    ensure_model_on_device(model, device)
+    previous_val = baseline_row["validation_nll"]
+    selected_k = 0
     stop_reason = "reached_grid_end"
     for k in GRID:
         selected = select_prefix(candidates_by_layer, k, layers)
@@ -331,7 +335,7 @@ def run_one_replicate(
         (rep_dir / "apg_curve_partial.json").write_text(
             json.dumps(
                 {
-                    "grid": list(GRID),
+                    "grid": [0, *list(GRID)],
                     "completed_rows": hba_rows,
                     "latest_k": k,
                     "selected_k_so_far": selected_k,
@@ -342,12 +346,12 @@ def run_one_replicate(
             encoding="utf-8",
         )
         log(f"{rep_name}: HBA K={k} val_nll={row['validation_nll']:.8f} edits={row['num_relocations']}")
-        if previous_val is not None and not (row["validation_nll"] < previous_val):
+        if not (row["validation_nll"] < previous_val):
             stop_reason = f"first_non_improvement_at_K={k}"
             (rep_dir / "apg_curve_partial.json").write_text(
                 json.dumps(
                     {
-                        "grid": list(GRID),
+                        "grid": [0, *list(GRID)],
                         "completed_rows": hba_rows,
                         "latest_k": k,
                         "selected_k_so_far": selected_k,
@@ -363,9 +367,6 @@ def run_one_replicate(
         restore_qk(model, qk_checkpoint)
         ensure_model_on_device(model, device)
 
-    if selected_k is None:
-        selected_k = hba_rows[0]["k_per_layer"]
-        stop_reason = "first_grid_point_only"
     selected_edits = select_prefix(candidates_by_layer, selected_k, layers)
     selected_states = apply_edit_list(codes, selected_edits)
     selected_audit = audit_all(codes, selected_states)
@@ -378,7 +379,7 @@ def run_one_replicate(
         "k_per_layer": int(selected_k),
         "num_relocations": len(selected_edits),
         "changed_coordinates": changed_coordinates(codes, selected_states),
-        "selected_layers": list(layers),
+        "selected_layers": sorted(int(x) for x in {e.layer for e in selected_edits}),
         "module_counts": {key: sum(1 for e in selected_edits if e.key == key) for key in ("q", "k")},
         "qgp_score_sum": float(sum(e.score for e in selected_edits)),
         "state_hash_before": base_hash,
@@ -418,7 +419,7 @@ def run_one_replicate(
     delta_nll = metric_delta(final_nll, reference_nll)
 
     (rep_dir / "apg_curve.json").write_text(
-        json.dumps({"grid": list(GRID), "rows": hba_rows, "selected_k": selected_k, "stop_reason": stop_reason}, indent=2),
+        json.dumps({"grid": [0, *list(GRID)], "rows": hba_rows, "selected_k": selected_k, "stop_reason": stop_reason}, indent=2),
         encoding="utf-8",
     )
     (rep_dir / "selected_patch.json").write_text(json.dumps(selected_patch, indent=2), encoding="utf-8")
@@ -431,7 +432,7 @@ def run_one_replicate(
         "data": data_manifest,
         "gradient_audit": grad_audit,
         "ranking_manifest": ranking_manifest,
-        "apg": {"curve": hba_rows, "selected_k": int(selected_k), "stop_reason": stop_reason},
+        "apg": {"baseline_row": baseline_row, "curve": hba_rows, "selected_k": int(selected_k), "stop_reason": stop_reason},
         "selected_patch": selected_patch,
         "metrics": {
             "absolute_ppl": final_ppl,
@@ -557,7 +558,9 @@ def main() -> None:
         "selection_indices": list(range(args.val_start, args.val_start + args.val_samples)),
         "selection_hash": selection_hash,
         "apg_grid": list(GRID),
+        "apg_grid_with_baseline": [0, *list(GRID)],
         "stopping": "first strict validation non-improvement",
+        "first_prefix_compared_to_q0": True,
         "scope": "32 decoder layers, Q/K only",
         "baseline_recomputed": False,
         "baseline_evaluation_skipped": True,

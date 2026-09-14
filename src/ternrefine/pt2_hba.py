@@ -433,15 +433,19 @@ def main() -> None:
     # is the stopping event. Candidate generation above is vectorized/one-pass;
     # evaluating all future K values in parallel would change this protocol.
     hba_rows: List[Dict[str, Any]] = []
-    previous_val = None
-    selected_k = None
+    baseline_row = row_for_patch(model, device, codes, perms, base_hash, [], val_batches, 0)
+    hba_rows.append(baseline_row)
+    log(f"HBA K=0: val_nll={baseline_row['validation_nll']:.8f} edits=0 baseline")
+    restore_qk(model, qk_checkpoint)
+    previous_val = baseline_row["validation_nll"]
+    selected_k = 0
     stop_reason = "reached_grid_end"
     for k in GRID:
         selected = select_prefix(candidates_by_layer, k, layers)
         row = row_for_patch(model, device, codes, perms, base_hash, selected, val_batches, k)
         hba_rows.append(row)
         log(f"HBA K={k}: val_nll={row['validation_nll']:.8f} edits={row['num_relocations']}")
-        if previous_val is not None and not (row["validation_nll"] < previous_val):
+        if not (row["validation_nll"] < previous_val):
             stop_reason = f"first_non_improvement_at_K={k}"
             break
         selected_k = k
@@ -449,9 +453,6 @@ def main() -> None:
         # Restore the exact saved PT2 deployment state before the next prefix
         # evaluation; do not introduce a BF16 codebook-reconstruction drift.
         restore_qk(model, qk_checkpoint)
-    if selected_k is None:
-        selected_k = hba_rows[0]["k_per_layer"]
-        stop_reason = "first_grid_point_only"
     selected_row = next(row for row in hba_rows if row["k_per_layer"] == selected_k)
     selected_edits = select_prefix(candidates_by_layer, selected_k, layers)
     selected_states = apply_edit_list(codes, selected_edits)
@@ -479,7 +480,7 @@ def main() -> None:
         "k_per_layer": int(selected_k),
         "num_relocations": len(selected_edits),
         "changed_coordinates": changed_coordinates(codes, selected_states),
-        "selected_layers": layers,
+        "selected_layers": sorted(int(x) for x in {e.layer for e in selected_edits}),
         "module_counts": {key: sum(1 for e in selected_edits if e.key == key) for key in ("q", "k")},
         "qgp_score_sum": float(sum(e.score for e in selected_edits)),
         "state_hash_before": base_hash,
@@ -488,7 +489,7 @@ def main() -> None:
         "cardinality_violations": selected_card,
         "edit_ids": [edit_key(e) for e in selected_edits],
     }
-    (out / "hba_curve.json").write_text(json.dumps({"grid": list(GRID), "rows": hba_rows, "selected_k": selected_k, "stop_reason": stop_reason}, indent=2), encoding="utf-8")
+    (out / "hba_curve.json").write_text(json.dumps({"grid": [0, *list(GRID)], "rows": hba_rows, "selected_k": selected_k, "stop_reason": stop_reason}, indent=2), encoding="utf-8")
     (out / "selected_patch.json").write_text(json.dumps(selected_patch, indent=2), encoding="utf-8")
 
     elapsed = time.time() - started
@@ -505,8 +506,9 @@ def main() -> None:
             "hba_scope": "all 32 decoder layers, Q/K only",
             "one_quantized_point_backward": True,
             "fixed_qgp_ranking": True,
-            "hba_grid": list(GRID),
+            "hba_grid": [0, *list(GRID)],
             "hba_stop": "first strict validation non-improvement",
+            "hba_compares_first_prefix_to_q0": True,
             "no_rerank": True,
             "no_additional_backward_after_ranking": 0,
             "mu_alpha_frozen": True,
@@ -531,6 +533,7 @@ def main() -> None:
             "layer_rows": layer_summary,
         },
         "hba": {
+            "baseline_row": baseline_row,
             "curve": hba_rows,
             "selected_k": int(selected_k),
             "stop_reason": stop_reason,

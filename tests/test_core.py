@@ -35,6 +35,13 @@ class CoreTest(unittest.TestCase):
         ]
         self.assertEqual(apg_first_non_improvement(curve).patch_size, 2)
 
+    def test_apg_can_return_unedited_baseline(self):
+        curve = [
+            APGPoint(0, 2.0, 0, 0),
+            APGPoint(1, 2.1, 1, 2),
+        ]
+        self.assertEqual(apg_first_non_improvement(curve).patch_size, 0)
+
     def test_qgp_score_sign(self):
         score = qgp_score(
             donor_gradient=1.0,

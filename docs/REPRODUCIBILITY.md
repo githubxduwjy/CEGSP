@@ -17,7 +17,7 @@ The YAML files in `protocols/` are protocol documentation rather than automatic 
 TernRefine uses separate roles for fitting, APG selection, and final evaluation:
 
 - fitting data computes the single quantized-point task gradient;
-- APG selection data chooses the prefix length;
+- APG selection data chooses the prefix length, including the possibility of returning `K=0` / the original `Q0`;
 - WikiText2/C4 test and downstream tasks are evaluated only after patch selection;
 - downstream tasks are never used for patch selection.
 
@@ -39,3 +39,5 @@ This artifact supports inspection of the algorithm, the key quantized-point-vs-F
 ## Large-Model Candidate Preselection
 
 The large-model implementation uses an explicit efficiency preselection: for each quantization group, it retains the best first-order legal relocation before forming the global/layerwise ranking. This is narrower than enumerating every coordinate-disjoint relocation inside the same group. The selected patch itself is still audited for coordinate-disjointness, finite weights, legal ternary states, and exact groupwise side-state cardinality.
+
+APG curves include a `K=0` validation row. The first nonzero prefix is accepted only if it strictly improves over this baseline row.

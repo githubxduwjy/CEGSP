@@ -10,7 +10,7 @@ TernRefine starts from an already deployed ternary model and refines only the di
 
 - **CPSR** defines legal capacity-preserving donor/receiver relocations.
 - **QGP** ranks legal relocations using one task gradient at the deployed quantized point.
-- **APG** chooses the patch extent by first validation non-improvement on a disjoint selection split.
+- **APG** chooses the patch extent by first validation non-improvement on a disjoint selection split, starting from the unedited baseline `K=0`.
 
 ## Artifact Layout
 
@@ -65,7 +65,7 @@ Run from the repository root after installing dependencies and preparing the ext
 | Table 3 mechanism: quantized-point vs FP-point task gradient | `bash reproduce/table3.sh --help` |
 | Large-model strong-PTQ example on Llama-2-7B | `bash reproduce/llama2_pt2.sh --help` |
 
-The Table 3 example keeps the same `Q0`, CPSR action space, loss, and 384-relocation budget; only the gradient evaluation point changes. The Llama example starts from a frozen PT2 ternary deployment and runs TernRefine/APG on the Q/K scope with fixed ranking and no reranking.
+The Table 3 example keeps the same `Q0`, CPSR action space, loss, and 384-relocation budget; only the gradient evaluation point changes. The Llama example starts from a frozen PT2 ternary deployment and runs TernRefine/APG on the Q/K scope with fixed ranking and no reranking. APG first evaluates `K=0`; if the first nonzero prefix does not improve validation loss, the released code returns the original `Q0`.
 
 The YAML files under `protocols/` are protocol specifications for reviewers to inspect. The command-line runners expose the executable arguments directly rather than reading YAML automatically.
 

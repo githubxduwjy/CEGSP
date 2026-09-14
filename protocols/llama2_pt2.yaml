@@ -11,8 +11,10 @@ scope:
 fit_indices: [0, 17, 33]
 selection_indices: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
 apg:
-  schedule: [1, 2, 4, 8, 16, 32, 64]
+  schedule: [0, 1, 2, 4, 8, 16, 32, 64]
   stopping: first_strict_validation_non_improvement
+  k0_is_unedited_q0: true
+  first_prefix_must_improve_over_k0: true
 protocol:
   one_backward_per_fit: true
   fixed_ranking: true
@@ -24,4 +26,3 @@ downstream:
   shots: 0
   batch_size: 1
   max_length: 2048
-

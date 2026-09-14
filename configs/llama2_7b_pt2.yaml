@@ -1,0 +1,27 @@
+experiment: llama2_7b_pt2_ternrefine
+model: /root/Llama-2-7b-hf
+initializer: official_pt2_atq_ssr
+group_size: 128
+calibration:
+  nsamples: 128
+  sequence_length: 2048
+scope:
+  modules: [q_proj, k_proj]
+  decoder_layers: 32
+fit_indices: [0, 17, 33]
+selection_indices: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+apg:
+  schedule: [1, 2, 4, 8, 16, 32, 64]
+  stopping: first_strict_validation_non_improvement
+protocol:
+  one_backward_per_fit: true
+  fixed_ranking: true
+  no_rerank: true
+  baseline_recomputed_in_replication: false
+downstream:
+  evaluator: lm-evaluation-harness
+  tasks: [hellaswag, piqa, arc_easy, arc_challenge, winogrande, mmlu]
+  shots: 0
+  batch_size: 1
+  max_length: 2048
+

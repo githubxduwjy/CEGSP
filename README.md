@@ -24,40 +24,51 @@ are not tracked.
 
 ## Layout
 
-- `ternrefine/` - small framework-independent CPSR/QGP/APG utilities.
+- `src/ternrefine/` - small framework-independent CPSR/QGP/APG utilities.
 - `remote-tools/` - paper experiment runners and compatibility tools.
+- `configs/` - frozen experiment protocols used by the paper scripts.
+- `reproduce/` - table-to-command entry points.
+- `scripts/` - small user-facing utilities such as result auditing.
+- `tests/` - smoke tests for CPSR/APG invariants.
 - `reference-code/pt2_official_9e943e6/` - pinned PT2 reference subset used by
   the state-export and strong-initializer scripts.
 - `env/` - dependency specification used for the CUDA/PyTorch runs.
 - `docs/` - reproducibility notes and script map.
 
-## Main Scripts
+## Paper Reproduction Map
 
-Mechanism and OPT-350M controls:
+Run scripts from the repository root after installing dependencies and setting
+model/cache paths required by the selected experiment.
 
-```bash
-python remote-tools/cegsp_e1_quantized_vs_fp_gradient_opt350m.py --help
-python remote-tools/cegsp_requant_comparison_4090.py --help
-python remote-tools/cegsp_requant_faithful_4090.py --help
+| Paper result | Recommended entry point |
+| --- | --- |
+| Table 3: quantized-point vs FP-point gradient | `bash reproduce/table3_eval_point.sh --help` |
+| Table 4 / APG: validation-selected patch growth | `bash reproduce/table4_apg.sh --help` |
+| Table 5: standardized downstream benchmark | `bash reproduce/table5_downstream.sh --help` |
+| Strong PT2 Llama replication | `python remote-tools/cegsp_pt2_hba_replication_a100_fastload.py --help` |
+| Strong PT2 Qwen replication | `python remote-tools/cegsp_e2_qwen_pt2_hba_replication_a100.py --help` |
+| ReQuant controls | `bash reproduce/requant_controls.sh --help` |
+
+The most important minimal mechanism experiment is Table 3. It keeps the same
+`Q0`, legal CPSR candidate pool, task objective, and 384-relocation budget, and
+changes only the gradient evaluation point.
+
+## Core Algorithm API
+
+The paper algorithm maps to the following implementation-level steps:
+
+```python
+from ternrefine import (
+    apg_first_non_improvement,
+    apply_relocations,
+    enumerate_cpsr_moves,
+    qgp_score,
+)
 ```
 
-Ordinary-affine and strong-PTQ TernRefine:
-
-```bash
-python remote-tools/cegsp_e1_cross_model_apg.py --help
-python remote-tools/cegsp_pt2_hba_replication_a100_fastload.py --help
-python remote-tools/cegsp_e2_qwen_pt2_hba_replication_a100.py --help
-```
-
-PT2 state export, health checks, and downstream evaluation:
-
-```bash
-python remote-tools/cegsp_e2_prepare_llama_pt2_state.py --help
-python remote-tools/cegsp_e2_llama_lm_eval_downstream.py --help
-python remote-tools/cegsp_e2_qwen_lm_eval_downstream.py --help
-python remote-tools/cegsp_e2_qwen_pt2_health_a100.py --help
-python remote-tools/cegsp_e2_qwen_pt2_state_forensics_a100.py --help
-```
+The large experiment runners adapt these primitives to affine ternary states,
+PT2 sidecars, Llama/Qwen model layouts, and lm-evaluation-harness downstream
+evaluation.
 
 ## Environment
 
@@ -68,10 +79,34 @@ python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install --index-url https://download.pytorch.org/whl/cu124 torch==2.5.1
 python -m pip install -r env/requirements-cegsp-cu124.txt
+python -m pip install -e .
 ```
 
 Large models, Hugging Face caches, PT2 checkpoints, and experiment outputs are
 expected to live outside the Git repository.
+
+## Smoke Test
+
+```bash
+python -m unittest discover -s tests
+python scripts/audit_patch.py --help
+```
+
+The smoke tests do not require a GPU or model checkpoint. They verify the
+capacity-preserving relocation and APG selection invariants on tiny states.
+
+## Auditing Results
+
+Patch/result JSONs can be checked with:
+
+```bash
+python scripts/audit_patch.py --result path/to/result.json
+```
+
+The audit utility checks the metadata most relevant to the paper claims:
+completion status, finite/legal flags, exact relocation counts, exact changed
+coordinate counts, cardinality violations, one-backward usage, and no-rerank
+flags when those fields are present.
 
 ## Reproducibility Rules
 

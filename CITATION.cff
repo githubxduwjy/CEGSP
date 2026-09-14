@@ -1,0 +1,9 @@
+cff-version: 1.2.0
+title: "TernRefine: Gradient-Guided Fixed-Capacity Refinement of Ternary LLMs"
+message: "If you use this artifact, please cite the associated paper."
+type: software
+authors:
+  - name: "Anonymous"
+date-released: 2026-09-14
+repository-code: "https://github.com/githubxduwjy/CEGSP"
+

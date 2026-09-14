@@ -1,0 +1,24 @@
+experiment: table3_eval_point
+model: facebook/opt-350m
+initializer: ordinary_affine
+group_size: 128
+threshold_factor: 0.75
+scope:
+  modules: [q_proj, k_proj]
+  layers: all_decoder_layers
+ranking:
+  candidates: shared_legal_cpsr_pool
+  methods: [qgp_quantized_point, fp_point_task_gradient, reconstruction, random]
+patch:
+  relocations: 384
+  changed_coordinates: 768
+splits:
+  fitting_offsets: [0, 1024, 2048, 3072, 4096]
+  selection: not_used_for_fixed_budget_table3
+evaluation:
+  datasets: [wikitext2, c4]
+  metric: nll
+notes:
+  - "Only the gradient evaluation point changes between QGP and FP-point."
+  - "W2/C4 are evaluated after the fixed patch is selected."
+

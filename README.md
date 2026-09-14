@@ -1,29 +1,67 @@
-# CEGSP: Quantized-Point Gradient Support Refinement
+# TernRefine
 
-This repository contains the research code and reproducibility metadata for
-CEGSP, a post-training ternary refinement method. CEGSP keeps the ternary
-codebook fixed during a local edit and uses the cross-entropy gradient at the
-deployed quantized point to rank legal same-group support relocations.
+This repository contains the core implementation and reproducibility scripts for
+the paper:
 
-The current mechanism claim is deliberately narrow: the first-order score
-`-<G, Delta Q>` can prioritize useful ternary support relocations in centered
-and affine representations. The repository does not claim that every strong
-ternary PTQ baseline is healthy or that CEGSP already dominates PT².
+**TernRefine: Gradient-Guided Fixed-Capacity Refinement of Ternary LLMs**
 
-## Repository layout
+TernRefine starts from an already deployed ternary model and refines only the
+discrete assignment. It keeps the ternary codebook fixed and preserves exact
+groupwise side-state cardinality. The method has three parts:
 
-- `remote-tools/` — CEGSP, ternary support-projection, diagnostics, and fixed
-  experiment launchers.
-- `reference-code/pt2_official_9e943e6/` — small, pinned PT² reference subset
-  used for protocol and state compatibility checks.
-- `autoresearch/` — the separate AutoResearch project and PTQ program files.
-- `env/` — validated Python/CUDA dependency specification and smoke test.
-- `refine-logs/` — experiment plans and analysis notes; large raw results and
-  model weights are intentionally excluded from Git.
-- `MIGRATION_4090.md` — 4090 migration instructions, reusable entry points,
-  and the detached PT2 sidecar contract.
+- **CPSR**: capacity-preserving side-state relocation defines legal donor and
+  receiver moves inside a quantization group.
+- **QGP**: quantized-point gradient projection scores each legal move with
+  `-<G, Delta Q>` using one task gradient at the deployed quantized state.
+- **APG**: adaptive patch growth evaluates prefixes of the fixed ranking on a
+  disjoint validation split and selects the first validated patch extent.
 
-## Quick start
+The repository is intentionally trimmed for conference artifact review. It
+keeps core components and the scripts needed to reproduce the paper's main
+mechanism, strong-PTQ, and downstream evaluations. Historical exploration logs,
+large result directories, model checkpoints, caches, and unrelated prototypes
+are not tracked.
+
+## Layout
+
+- `ternrefine/` - small framework-independent CPSR/QGP/APG utilities.
+- `remote-tools/` - paper experiment runners and compatibility tools.
+- `reference-code/pt2_official_9e943e6/` - pinned PT2 reference subset used by
+  the state-export and strong-initializer scripts.
+- `env/` - dependency specification used for the CUDA/PyTorch runs.
+- `docs/` - reproducibility notes and script map.
+
+## Main Scripts
+
+Mechanism and OPT-350M controls:
+
+```bash
+python remote-tools/cegsp_e1_quantized_vs_fp_gradient_opt350m.py --help
+python remote-tools/cegsp_requant_comparison_4090.py --help
+python remote-tools/cegsp_requant_faithful_4090.py --help
+```
+
+Ordinary-affine and strong-PTQ TernRefine:
+
+```bash
+python remote-tools/cegsp_e1_cross_model_apg.py --help
+python remote-tools/cegsp_pt2_hba_replication_a100_fastload.py --help
+python remote-tools/cegsp_e2_qwen_pt2_hba_replication_a100.py --help
+```
+
+PT2 state export, health checks, and downstream evaluation:
+
+```bash
+python remote-tools/cegsp_e2_prepare_llama_pt2_state.py --help
+python remote-tools/cegsp_e2_llama_lm_eval_downstream.py --help
+python remote-tools/cegsp_e2_qwen_lm_eval_downstream.py --help
+python remote-tools/cegsp_e2_qwen_pt2_health_a100.py --help
+python remote-tools/cegsp_e2_qwen_pt2_state_forensics_a100.py --help
+```
+
+## Environment
+
+The experiments were run with CUDA-capable PyTorch. A typical setup is:
 
 ```bash
 python3 -m venv .venv
@@ -32,23 +70,16 @@ python -m pip install --index-url https://download.pytorch.org/whl/cu124 torch==
 python -m pip install -r env/requirements-cegsp-cu124.txt
 ```
 
-A small score-validity run uses the fixed protocol documented in
-`refine-logs/EXPERIMENT_PLAN_CEGSP_P6A_SCORE_VALIDITY_20260828.md`. The main
-entry points are:
+Large models, Hugging Face caches, PT2 checkpoints, and experiment outputs are
+expected to live outside the Git repository.
 
-```bash
-python remote-tools/cegsp_p6a_score_validity_4090.py --help
-python remote-tools/cegsp_p6b_replication_4090.py --help
-```
+## Reproducibility Rules
 
-The filenames retain the historical `4090` suffix because these scripts were
-first validated there; they are ordinary PyTorch scripts and can run on an
-A100 after the environment smoke test passes.
-
-## Reproducibility rules
-
-- Do not commit model weights, Hugging Face caches, credentials, or raw result
-  directories.
-- Keep calibration/validation/untouched splits explicit in every result JSON.
-- Do not use untouched data to select thresholds, budgets, or candidates.
-- Record GPU, PyTorch/CUDA versions, model revision, seed, and token offsets.
+- Do not commit model weights, checkpoints, dataset caches, raw results, or
+  credentials.
+- Keep fit, APG-selection, W2/C4 test, and downstream data roles explicit.
+- Do not use W2/C4 or downstream task data to select a patch.
+- Record model path/revision, tokenizer, seed, split indices, GPU, PyTorch/CUDA
+  versions, and patch legality audits in result JSONs.
+- Treat Qwen PT2 endpoints with skipped strict parity as conditional unless the
+  health gate is explicitly passed.

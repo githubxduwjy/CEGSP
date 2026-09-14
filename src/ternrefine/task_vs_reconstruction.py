@@ -27,8 +27,8 @@ import numpy as np
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, set_seed
 
-from _support.ce_gradient import collect_ce_qk_grads
-from _support.affine_adapter import (
+from ternrefine.ce_gradient import collect_ce_qk_grads
+from ternrefine.affine_adapter import (
     AffineCode,
     AffineEdit,
     apply_affine_patch,
@@ -42,7 +42,7 @@ from _support.affine_adapter import (
     snapshot_qk,
     with_ppl,
 )
-from _support.data_eval import build_wikitext_splits, log, parse_csv_ints
+from ternrefine.data_eval import build_wikitext_splits, log, parse_csv_ints
 
 
 LAYERS = list(range(24))

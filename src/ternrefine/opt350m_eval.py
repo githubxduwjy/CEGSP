@@ -22,13 +22,13 @@ import torch
 import torch.nn.functional as F
 from transformers import AutoModelForCausalLM, AutoTokenizer, set_seed
 
-from _support.ce_gradient import (
+from ternrefine.ce_gradient import (
     collect_ce_qk_grads,
     projection_weight,
     set_projection_weight,
     target_modules,
 )
-from _support.data_eval import (
+from ternrefine.data_eval import (
     apply_direct_ptq_local,
     build_wikitext_splits,
     direct_ternary_weight,

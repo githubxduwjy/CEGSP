@@ -18,6 +18,7 @@ def main() -> None:
         row=0,
         group=0,
         ternary_group=state,
+        receiver_signs=[1, -1, 1, -1, 1, -1],
         score_fn=lambda donor, receiver, donor_sign, receiver_sign: qgp_score(
             gradient[donor], gradient[receiver], mu, alpha, donor_sign, receiver_sign
         ),

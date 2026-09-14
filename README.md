@@ -17,16 +17,14 @@ TernRefine starts from an already deployed ternary model and refines only the di
 ```text
 .
 ├── README.md
-├── CITATION.cff
 ├── pyproject.toml
 ├── requirements.txt
 ├── src/ternrefine/
 ├── examples/
 │   ├── smoke_test.py
 │   ├── table3_opt350m.py
-│   ├── llama2_pt2_refine.py
-│   └── _support/
-├── configs/
+│   └── llama2_pt2_refine.py
+├── protocols/
 │   ├── table3_opt350m.yaml
 │   └── llama2_pt2.yaml
 ├── reproduce/
@@ -68,6 +66,10 @@ Run from the repository root after installing dependencies and preparing the ext
 | Large-model strong-PTQ example on Llama-2-7B | `bash reproduce/llama2_pt2.sh --help` |
 
 The Table 3 example keeps the same `Q0`, CPSR action space, loss, and 384-relocation budget; only the gradient evaluation point changes. The Llama example starts from a frozen PT2 ternary deployment and runs TernRefine/APG on the Q/K scope with fixed ranking and no reranking.
+
+The YAML files under `protocols/` are protocol specifications for reviewers to inspect. The command-line runners expose the executable arguments directly rather than reading YAML automatically.
+
+For efficiency, the large-model implementation retains the best first-order legal relocation from each quantization group before global/layerwise ranking. Final patch construction still enforces coordinate-disjoint CPSR compatibility and exact cardinality preservation.
 
 Additional experiment-specific runners used during development will be released with the full repository after review.
 

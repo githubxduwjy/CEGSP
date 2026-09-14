@@ -10,6 +10,8 @@ This branch is a cleaned anonymous artifact. It provides the core implementation
 
 It is not intended to be a complete dump of all development runners. Historical debugging scripts, Qwen conditional-parity forensics, ReQuant controls, raw logs, checkpoints, caches, and cluster-specific launch files are intentionally excluded from this review package.
 
+The YAML files in `protocols/` are protocol documentation rather than automatic configuration inputs. The executable settings are passed through each runner's command-line interface and should be recorded in the run manifest.
+
 ## Data Boundaries
 
 TernRefine uses separate roles for fitting, APG selection, and final evaluation:
@@ -33,3 +35,7 @@ The repository `.gitignore` excludes model weights, checkpoints, caches, raw res
 ## Expected Scope of Claims
 
 This artifact supports inspection of the algorithm, the key quantized-point-vs-FP-point mechanism example, and one clean large-model PT2 deployment example. It should not be described as containing every appendix ablation or every model-family runner.
+
+## Large-Model Candidate Preselection
+
+The large-model implementation uses an explicit efficiency preselection: for each quantization group, it retains the best first-order legal relocation before forming the global/layerwise ranking. This is narrower than enumerating every coordinate-disjoint relocation inside the same group. The selected patch itself is still audited for coordinate-disjointness, finite weights, legal ternary states, and exact groupwise side-state cardinality.

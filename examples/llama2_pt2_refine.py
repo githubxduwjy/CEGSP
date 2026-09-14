@@ -29,7 +29,7 @@ from typing import Any, Dict, Iterable, List, Sequence, Tuple
 import torch
 from transformers import set_seed
 
-from _support.large_model_affine import (
+from ternrefine.large_model_affine import (
     AffineEdit,
     audit_all,
     build_top_candidates,
@@ -39,7 +39,7 @@ from _support.large_model_affine import (
     get_decoder_layers,
     metric_delta,
 )
-from _support.pt2_sidecar import (
+from ternrefine.pt2_sidecar import (
     apply_ssr_codes,
     cardinality_violations,
     finite_metrics,
@@ -47,7 +47,7 @@ from _support.pt2_sidecar import (
     official_metrics,
     restore_qk,
 )
-from _support.pt2_hba import (
+from ternrefine.pt2_hba import (
     GRID,
     apply_edit_list,
     candidate_manifest,
@@ -509,7 +509,7 @@ def main() -> None:
     model = pt2_quantize.get_model(args.model, args.calib_seq_len)
     model.seqlen = args.calib_seq_len
     if args.pt2_checkpoint:
-        from _support.artifact_state import load_full_pt2_state
+        from ternrefine.artifact_state import load_full_pt2_state
 
         ckpt_path = Path(args.pt2_checkpoint)
         if not ckpt_path.exists():

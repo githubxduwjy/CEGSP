@@ -29,8 +29,8 @@ import numpy as np
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, set_seed
 
-from _support.ce_gradient import collect_ce_qk_grads
-from _support.task_vs_reconstruction import (
+from ternrefine.ce_gradient import collect_ce_qk_grads
+from ternrefine.task_vs_reconstruction import (
     LAYERS,
     build_c4_cached_batches,
     changed_coordinates,
@@ -39,20 +39,20 @@ from _support.task_vs_reconstruction import (
     metric_delta,
     reconstruction_score,
 )
-from _support.affine_adapter import (
+from ternrefine.affine_adapter import (
     AffineCode,
     AffineEdit,
     apply_affine_patch,
     apply_edits,
     audit_all,
-    build_group_candidates_vectorized,
+    build_group_candidates,
     cardinality_violations,
     eval_metrics,
     make_affine_code,
     snapshot_qk,
     with_ppl,
 )
-from _support.data_eval import evaluate_nll, log, parse_csv_ints, read_wikitext_arrow_cache
+from ternrefine.data_eval import evaluate_nll, log, parse_csv_ints, read_wikitext_arrow_cache
 
 
 def parse_args() -> argparse.Namespace:
@@ -358,8 +358,8 @@ def main() -> None:
         fp_candidates: List[AffineEdit] = []
         for layer in layers:
             for key in ("q", "k"):
-                q_candidates.extend(build_group_candidates_vectorized(layer, key, codes[layer][key], q_grads[layer][key], "affine_fp"))
-                fp_candidates.extend(build_group_candidates_vectorized(layer, key, codes[layer][key], fp_grads[layer][key], "affine_fp"))
+                q_candidates.extend(build_group_candidates(layer, key, codes[layer][key], q_grads[layer][key], "affine_fp"))
+                fp_candidates.extend(build_group_candidates(layer, key, codes[layer][key], fp_grads[layer][key], "affine_fp"))
         pool = unique_candidates(q_candidates + fp_candidates)
         log(f"E1 offset={fit_offset} shared candidate pool built count={len(pool)}")
         rng = random.Random(args.seed + int(fit_offset))

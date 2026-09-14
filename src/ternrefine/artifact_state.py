@@ -13,7 +13,7 @@ from typing import Any, Dict
 
 import torch
 
-from _support.large_model_affine import get_decoder_layers
+from ternrefine.large_model_affine import get_decoder_layers
 
 
 def _module_by_name(layer: torch.nn.Module, name: str) -> torch.nn.Module:

@@ -25,7 +25,7 @@ from typing import Dict, List, Sequence, Tuple
 import torch
 from transformers import set_seed
 
-from _support.large_model_affine import (
+from ternrefine.large_model_affine import (
     AffineCode,
     AffineEdit,
     audit_all,

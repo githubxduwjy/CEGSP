@@ -25,14 +25,14 @@ from typing import Dict, List, Tuple
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, set_seed
 
-from _support.ce_gradient import (
+from ternrefine.ce_gradient import (
     collect_ce_qk_grads,
     projection_weight,
     set_projection_weight,
     target_modules,
 )
-from _support.opt350m_eval import build_c4_untouched_batches
-from _support.data_eval import (
+from ternrefine.opt350m_eval import build_c4_untouched_batches
+from ternrefine.data_eval import (
     build_wikitext_splits,
     evaluate_nll,
     log,

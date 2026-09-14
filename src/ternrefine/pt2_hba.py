@@ -25,7 +25,7 @@ from typing import Any, Dict, Iterable, List, Sequence
 import torch
 from transformers import AutoModelForCausalLM, set_seed
 
-from _support.large_model_affine import (
+from ternrefine.large_model_affine import (
     AffineEdit,
     audit_all,
     build_top_candidates,
@@ -36,7 +36,7 @@ from _support.large_model_affine import (
     metric_delta,
     target_qk,
 )
-from _support.pt2_sidecar import (
+from ternrefine.pt2_sidecar import (
     apply_ssr_codes,
     cardinality_violations,
     detached_reload_gate,

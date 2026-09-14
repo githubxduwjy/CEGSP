@@ -19,9 +19,10 @@ class CoreTest(unittest.TestCase):
             row=0,
             group=0,
             ternary_group=state,
+            receiver_signs=[1, -1, 1, -1],
             score_fn=lambda donor, receiver, donor_sign, receiver_sign: 0.0,
         )
-        self.assertEqual(len(moves), 8)
+        self.assertEqual(len(moves), 4)
         after = apply_relocations(state, [moves[0]])
         self.assertEqual(sum(abs(x) for x in state), sum(abs(x) for x in after))
         self.assertEqual(changed_coordinates(state, after), 2)

@@ -1,7 +1,8 @@
 """Core utilities for TernRefine.
 
-The executable representative examples live in ``examples``. This package keeps
-the paper-level CPSR/QGP/APG primitives in a small importable form.
+Representative experiment runners live in ``examples``. This package keeps the
+paper-level CPSR/QGP/APG primitives plus the reusable affine/PT2 adapters used
+by those examples.
 """
 
 from .core import (

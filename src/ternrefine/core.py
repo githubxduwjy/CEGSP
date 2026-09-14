@@ -62,34 +62,41 @@ def enumerate_cpsr_moves(
     row: int,
     group: int,
     ternary_group: Sequence[int],
+    receiver_signs: Sequence[int],
     score_fn: Callable[[int, int, int, int], float],
 ) -> List[Relocation]:
     """Enumerate legal same-group donor-receiver relocations.
 
-    Donors are side-state entries, receivers are center-state entries. A move
-    transfers the donor side sign to a center entry and turns the donor into a
-    center entry, preserving side-state cardinality exactly.
+    Donors are side-state entries and receivers are center-state entries.  The
+    receiver side label is supplied by the initializer and fixed before
+    ranking.  A move transfers the donor side state to the receiver's registered
+    side label and turns the donor into a center entry, preserving side-state
+    cardinality exactly.
     """
 
+    if len(receiver_signs) != len(ternary_group):
+        raise ValueError("receiver_signs must have the same length as ternary_group")
     donors = [(i, int(v)) for i, v in enumerate(ternary_group) if int(v) in (-1, 1)]
     receivers = [i for i, v in enumerate(ternary_group) if int(v) == 0]
     moves: List[Relocation] = []
     for donor, donor_sign in donors:
         for receiver in receivers:
-            for receiver_sign in (-1, 1):
-                moves.append(
-                    Relocation(
-                        layer=layer,
-                        module=module,
-                        row=row,
-                        group=group,
-                        donor=donor,
-                        receiver=receiver,
-                        donor_sign=donor_sign,
-                        receiver_sign=receiver_sign,
-                        score=float(score_fn(donor, receiver, donor_sign, receiver_sign)),
-                    )
+            receiver_sign = int(receiver_signs[receiver])
+            if receiver_sign not in (-1, 1):
+                raise ValueError("receiver_signs for center receivers must be -1 or +1")
+            moves.append(
+                Relocation(
+                    layer=layer,
+                    module=module,
+                    row=row,
+                    group=group,
+                    donor=donor,
+                    receiver=receiver,
+                    donor_sign=donor_sign,
+                    receiver_sign=receiver_sign,
+                    score=float(score_fn(donor, receiver, donor_sign, receiver_sign)),
                 )
+            )
     return moves
 
 

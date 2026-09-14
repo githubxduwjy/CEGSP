@@ -159,6 +159,9 @@ class Capture:
         self.active_ssr: object | None = None
         self.local_perms: List[torch.Tensor] = []
         self.total_quantizer_calls = 0
+        # Full-state export needs the discrete T state for every PT2 module,
+        # but does not need to retain dense q for non-Q/K modules.
+        self.store_all_t = False
 
     def reset_quantizer(self) -> None:
         self.initial_t = None
@@ -220,7 +223,7 @@ def install_capture(qmod: object, gptqmod: object, ssrmod: object, capture: Capt
         columns = int(q_cat.shape[1])
         capture.modules.append({
             "q": q_cat if is_target else None,
-            "T": t_cat if is_target else None,
+            "T": t_cat if (is_target or capture.store_all_t) else None,
             "perm": torch.arange(columns, dtype=torch.long),
             "ssr": False,
             "shape": [int(q_cat.shape[0]), columns],
@@ -247,7 +250,7 @@ def install_capture(qmod: object, gptqmod: object, ssrmod: object, capture: Capt
         is_target = module_index % 7 in (0, 2)
         capture.modules.append({
             "q": q_cat if is_target else None,
-            "T": t_cat if is_target else None,
+            "T": t_cat if (is_target or capture.store_all_t) else None,
             "perm": perm,
             "ssr": True,
             "shape": [int(q_cat.shape[0]), int(q_cat.shape[1])],
@@ -565,8 +568,16 @@ def official_metrics(model: torch.nn.Module, model_path: str, device: torch.devi
     evaluator = importlib.import_module("pt2_llm.eval_ppl")
     _, w2_test = data.get_loaders("wikitext2", seed=0, seqlen=seqlen, model=model_path)
     _, c4_test = data.get_loaders("c4", seed=0, seqlen=seqlen, model=model_path)
-    w2 = float(evaluator.llama_eval(model, w2_test, device, "wikitext2", False, seqlen))
-    c4 = float(evaluator.llama_eval(model, c4_test, device, "c4", False, seqlen))
+    # PT2 provides a separate evaluator for Qwen-style decoder interfaces.
+    # Calling llama_eval for Qwen can yield invalid PPL and also leaves the
+    # model layerwise-offloaded on CPU for a later gradient pass.
+    model_type = str(getattr(getattr(model, "config", None), "model_type", "")).lower()
+    is_qwen = "qwen" in model_type or "qwen" in str(model_path).lower()
+    eval_fn = getattr(evaluator, "qwen_eval", None) if is_qwen else None
+    if eval_fn is None:
+        eval_fn = evaluator.llama_eval
+    w2 = float(eval_fn(model, w2_test, device, "wikitext2", False, seqlen))
+    c4 = float(eval_fn(model, c4_test, device, "c4", False, seqlen))
     result = {"wikitext2_ppl": w2, "c4_ppl": c4}
     if not finite_metrics(result):
         raise RuntimeError(f"official evaluator returned nonfinite metrics: {result}")

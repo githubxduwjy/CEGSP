@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""P7: A100 smoke and 7B/8B frozen-canonical affine CEGSP scaling.
+"""P7: A100 smoke and 7B/8B frozen-canonical affine TernRefine scaling.
 
-This script keeps the P5-B affine CEGSP rule intact while replacing the
+This script keeps the P5-B affine TernRefine rule intact while replacing the
 OPT-only adapter with a generic Q/K projection adapter for common decoder-only
 transformer blocks.
 """
@@ -239,7 +239,7 @@ def build_splits(tokenizer, seq_len: int, batch_size: int, fit_batches: int, val
         source = {"wikitext_train": train_src, "wikitext_validation": valid_src}
     except Exception as exc:
         source = {"wikitext": f"deterministic-fallback:{type(exc).__name__}:{exc}"}
-        train_text = ("CEGSP evaluates ternary support relocation from quantized point gradients. ") * 20000
+        train_text = ("TernRefine evaluates ternary support relocation from quantized point gradients. ") * 20000
         valid_text = ("Untouched validation text is deterministic fallback and cannot support a paper claim. ") * 10000
     c4_text = ""
     if c4_batches > 0:
@@ -431,7 +431,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--grad-batches", type=int, default=1)
     p.add_argument("--dtype", choices=["bf16", "fp32"], default="bf16")
     p.add_argument("--seed", type=int, default=20260831)
-    p.add_argument("--out-dir", default="/root/tqgsp-runs")
+    p.add_argument("--out-dir", default="results")
     return p.parse_args()
 
 
@@ -482,7 +482,7 @@ def main() -> None:
         grad_norms = {str(layer): {key: float(value.norm().item()) for key, value in layer_grads.items()} for layer, layer_grads in grads.items()}
         result = {
             "run_id": args.run_id,
-            "experiment": "CEGSP-P7-S0 A100 8B memory smoke",
+            "experiment": "TernRefine-P7-S0 A100 8B memory smoke",
             "status": "complete",
             "config": vars(args),
             "data_source": data_source,
@@ -564,7 +564,7 @@ def main() -> None:
 
     result = {
         "run_id": args.run_id,
-        "experiment": "CEGSP-P7-A/B A100 frozen-canonical affine scaling",
+        "experiment": "TernRefine-P7-A/B A100 frozen-canonical affine scaling",
         "status": "complete",
         "config": vars(args),
         "data_source": data_source,

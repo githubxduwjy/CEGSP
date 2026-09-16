@@ -1,6 +1,8 @@
 experiment: llama2_7b_pt2_ternrefine
-model: /root/Llama-2-7b-hf
+model: "<MODEL_PATH>"
 initializer: official_pt2_atq_ssr
+external_pt2_root: "<PT2_ROOT>"
+external_pt2_data_root: "<PT2_DATA_ROOT>"
 group_size: 128
 calibration:
   nsamples: 128

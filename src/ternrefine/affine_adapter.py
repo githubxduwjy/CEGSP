@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""P5-A: affine-ternary CEGSP adapter feasibility.
+"""P5-A: affine-ternary TernRefine adapter feasibility.
 
 This experiment is intentionally small and protocol-focused.  It does not run
 PT² itself and it does not claim strong-baseline performance.  It checks whether
-CEGSP's support relocation can be defined inside a PT²-style affine ternary
+TernRefine's support relocation can be defined inside a PT²-style affine ternary
 codebook,
 
     Q = mu + alpha * T,  T in {-1, 0, +1},
@@ -85,7 +85,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--grad-batches", type=int, default=1)
     p.add_argument("--dtype", choices=["bf16", "fp32"], default="bf16")
     p.add_argument("--seed", type=int, default=20260828)
-    p.add_argument("--out-dir", default="/root/tqgsp-runs")
+    p.add_argument("--out-dir", default="results")
     return p.parse_args()
 
 
@@ -510,7 +510,7 @@ def main() -> None:
     )
     result = {
         "run_id": args.run_id,
-        "experiment": "CEGSP-P5-A affine ternary adapter feasibility",
+        "experiment": "TernRefine-P5-A affine ternary adapter feasibility",
         "status": "complete",
         "config": vars(args),
         "wikitext_source": wikitext_source,

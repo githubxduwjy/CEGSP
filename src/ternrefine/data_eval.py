@@ -53,7 +53,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--nll-sanity", action="store_true")
     p.add_argument("--e2e-nll", action="store_true")
     p.add_argument("--seed", type=int, default=20260826)
-    p.add_argument("--out-dir", default="/root/tqgsp-runs")
+    p.add_argument("--out-dir", default="results")
     return p.parse_args()
 
 

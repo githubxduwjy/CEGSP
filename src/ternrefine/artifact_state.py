@@ -24,16 +24,16 @@ def _module_by_name(layer: torch.nn.Module, name: str) -> torch.nn.Module:
 
 
 def load_full_pt2_state(model: torch.nn.Module, checkpoint: Path) -> Dict[str, Any]:
-    """Load a CEGSP-exported frozen PT2 state into ``model``.
+    """Load a TernRefine-exported frozen PT2 state into ``model``.
 
     Supported formats:
-    - ``CEGSP_PT2_FULL_STATE_V1``: all modules stored as ternary sidecar state.
-    - ``CEGSP_PT2_FULL_STATE_V2_MIXED``: ternary modules plus optional raw
+    - ``TernRefine_PT2_FULL_STATE_V1``: all modules stored as ternary sidecar state.
+    - ``TernRefine_PT2_FULL_STATE_V2_MIXED``: ternary modules plus optional raw
       deployed-weight entries for modules that are not edited by TernRefine.
     """
 
     payload = torch.load(checkpoint, map_location="cpu")
-    if payload.get("format") not in {"CEGSP_PT2_FULL_STATE_V1", "CEGSP_PT2_FULL_STATE_V2_MIXED"}:
+    if payload.get("format") not in {"TernRefine_PT2_FULL_STATE_V1", "TernRefine_PT2_FULL_STATE_V2_MIXED"}:
         raise RuntimeError(f"unsupported PT2 checkpoint format: {payload.get('format')}")
 
     layers = get_decoder_layers(model)

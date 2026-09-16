@@ -1,4 +1,4 @@
-# Validated on the BitaHub CEGSP container with Python 3.11.15.
+# Validated with Python 3.11.15 on a single-GPU Linux environment.
 # Install PyTorch separately from the CUDA 12.4 wheel index first:
 #   python -m pip install --index-url https://download.pytorch.org/whl/cu124 torch==2.5.1
 # Then install this file from the regular PyPI index.

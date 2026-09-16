@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CEGSP-01A: CE-gradient support projection at ternary PTQ weights.
+"""TernRefine-01A: CE-gradient support projection at ternary PTQ weights.
 
 Strict PTQ: no QAT teacher, no QAT checkpoint/logits/latent weights, no
 optimizer update.  We compute a small CE gradient at the deployed ternary point
@@ -61,7 +61,7 @@ def _architecture_name(model: torch.nn.Module) -> str:
     if model_type in {"gpt_neox", "pythia"} or hasattr(model, "gpt_neox"):
         return "gpt_neox"
     raise RuntimeError(
-        "Unsupported architecture for CEGSP adapter: "
+        "Unsupported architecture for TernRefine adapter: "
         f"model_type={model_type!r}; supported families are OPT and GPT-NeoX/Pythia"
     )
 
@@ -145,7 +145,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--random-control-repeats", type=int, default=0)
     p.add_argument("--cloze-examples", type=int, default=0)
     p.add_argument("--cloze-patch-prefixes", default="ksweep-joint")
-    p.add_argument("--out-dir", default="/root/tqgsp-runs")
+    p.add_argument("--out-dir", default="results")
     return p.parse_args()
 
 
@@ -528,9 +528,9 @@ def main() -> None:
     ]
 
     patch_defs = {
-        "cegsp-support-all-qk": ("support", list(layers)),
-        "cegsp-support-selected-qk": ("support", support_selected),
-        "cegsp-support-topk-qk": ("support", support_top),
+        "ternrefine-support-all-qk": ("support", list(layers)),
+        "ternrefine-support-selected-qk": ("support", support_selected),
+        "ternrefine-support-topk-qk": ("support", support_top),
         "ce-signflip-all-qk": ("signflip", list(layers)),
         "ce-signflip-selected-qk": ("signflip", signflip_selected),
         "ce-signflip-topk-qk": ("signflip", signflip_top),
@@ -688,7 +688,7 @@ def main() -> None:
         },
         "config": vars(args),
         "validation_version": {
-            "name": "CEGSP-07A-ternary-specificity-compatible",
+            "name": "TernRefine-07A-ternary-specificity-compatible",
             "primary_question": "Do CE gradients at deployed ternary weights expose a ternary-specific zero-support relocation signal beyond nonzero-only signflip controls?",
             "gate": {
                 "primary": "CE joint top-k should improve untouched NLL versus direct ternary and random joint controls",

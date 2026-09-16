@@ -1,6 +1,6 @@
 # Reproducibility Notes
 
-This branch is a cleaned anonymous artifact. It provides the core implementation and three representative entry points:
+This cleaned anonymous artifact provides the core implementation and three representative entry points:
 
 | Component | Command |
 | --- | --- |

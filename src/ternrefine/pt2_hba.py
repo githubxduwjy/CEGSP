@@ -56,13 +56,13 @@ def log(message: str) -> None:
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser()
-    p.add_argument("--model", default="/root/Llama-2-7b-hf")
+    p.add_argument("--model", required=True)
     p.add_argument("--sidecar-dir", required=True)
     p.add_argument("--reference-json", required=True)
     p.add_argument("--run-id", required=True)
-    p.add_argument("--out-dir", default="/root/tqgsp-runs")
-    p.add_argument("--pt2-root", default="/root/PT2-LLM-full")
-    p.add_argument("--pt2-data-root", default="/root/PT2-data")
+    p.add_argument("--out-dir", default="results")
+    p.add_argument("--pt2-root", required=True)
+    p.add_argument("--pt2-data-root", required=True)
     p.add_argument("--group-size", type=int, default=128)
     p.add_argument("--calib-nsamples", type=int, default=128)
     p.add_argument("--calib-seq-len", type=int, default=2048)

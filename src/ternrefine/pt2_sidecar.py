@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""P9-S2: detached PT2 sidecar + frozen affine CEGSP plug-in test.
+"""P9-S2: detached PT2 sidecar + frozen affine TernRefine plug-in test.
 
 The script re-runs the official PT2 ATQ+SSR pipeline, exports the real ternary
 state and Q/K checkpoint to disk, then reloads those artifacts before running
-the same frozen CEGSP rule.  The goal is interface parity, not recovering a
-positive PT2+CEGSP result.
+the same frozen TernRefine rule.  The goal is interface parity, not recovering a
+positive PT2+TernRefine result.
 """
 
 from __future__ import annotations
@@ -49,11 +49,11 @@ def log(message: str) -> None:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model", default="/root/Llama-2-7b-hf")
-    parser.add_argument("--pt2-root", default="/root/PT2-LLM-full")
-    parser.add_argument("--pt2-data-root", default="/root/PT2-data")
+    parser.add_argument("--model", required=True)
+    parser.add_argument("--pt2-root", required=True)
+    parser.add_argument("--pt2-data-root", required=True)
     parser.add_argument("--run-id", required=True)
-    parser.add_argument("--out-dir", default="/root/tqgsp-runs")
+    parser.add_argument("--out-dir", default="results")
     parser.add_argument("--group-size", type=int, default=128)
     parser.add_argument("--nsamples", type=int, default=128)
     parser.add_argument("--calib-seq-len", type=int, default=2048)
@@ -376,7 +376,7 @@ def save_detached_artifacts(
     model_dir.mkdir(parents=True, exist_ok=True)
 
     ternary_payload: Dict[str, object] = {
-        "format": "CEGSP_P9S2_TERNARY_SIDECAR_V1",
+        "format": "TernRefine_P9S2_TERNARY_SIDECAR_V1",
         "modules": {},
     }
     for layer, layer_codes in codes.items():
@@ -399,7 +399,7 @@ def save_detached_artifacts(
     torch.save(pt2_qk, model_dir / "qk_checkpoint.pt")
 
     metadata = {
-        "format": "CEGSP_P9S2_METADATA_V1",
+        "format": "TernRefine_P9S2_METADATA_V1",
         "experiment": "P9-S2 detached PT2 plug-in interface",
         "run_id": args.run_id,
         "pt2_root": args.pt2_root,
@@ -425,7 +425,7 @@ def load_detached_artifacts(sidecar_dir: Path) -> Tuple[Dict[int, Dict[str, Affi
     payload = torch.load(sidecar_dir / "ternary_state.pt", map_location="cpu")
     fp_qk = torch.load(sidecar_dir / "fp_qk.pt", map_location="cpu")
     qk_checkpoint = torch.load(sidecar_dir / "model" / "qk_checkpoint.pt", map_location="cpu")
-    if payload.get("format") != "CEGSP_P9S2_TERNARY_SIDECAR_V1":
+    if payload.get("format") != "TernRefine_P9S2_TERNARY_SIDECAR_V1":
         raise RuntimeError(f"unsupported sidecar format: {payload.get('format')}")
 
     codes: Dict[int, Dict[str, AffineCode]] = {}
@@ -708,7 +708,7 @@ def main() -> None:
 
     result: Dict[str, object] = {
         "run_id": args.run_id,
-        "experiment": "P9-S2 detached PT2 sidecar plug-in + frozen affine-index CEGSP",
+        "experiment": "P9-S2 detached PT2 sidecar plug-in + frozen affine-index TernRefine",
         "status": "detached_reload_passed" if parity["pass"] and detached_reload["pass"] else "detached_interface_failed",
         "config": vars(args),
         "protocol": {
@@ -723,7 +723,7 @@ def main() -> None:
             "teacher_or_qat": False,
             "selection_uses_untouched": False,
             "one_quantized_point_backward": True,
-            "detached_pt2_process_boundary": "disk sidecar + qk checkpoint reload before CEGSP",
+            "detached_pt2_process_boundary": "disk sidecar + qk checkpoint reload before TernRefine",
             "instrumentation_ppl_abs_tolerance": INSTRUMENTATION_PPL_TOL,
             "random_seed": args.random_seed,
         },
@@ -848,7 +848,7 @@ def main() -> None:
     result["layer_ranking"] = layer_ranking
     result["variants"] = {
         "pt2": {"metrics": baseline_state_metrics, "nll": baseline_nll, "num_edits": 0, "changed_coordinates": 0},
-        "pt2_plus_affine_cegsp_top6": {
+        "pt2_plus_affine_ternrefine_top6": {
             "metrics": ce_metrics,
             "nll": ce_nll,
             "delta_vs_pt2_nll": metric_delta(ce_nll, baseline_nll),

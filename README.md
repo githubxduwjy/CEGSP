@@ -1,6 +1,6 @@
 # TernRefine Anonymous Artifact
 
-This branch is a compact conference-review artifact for:
+This repository snapshot is a compact conference-review artifact for:
 
 **TernRefine: Gradient-Guided Fixed-Capacity Refinement of Ternary LLMs**
 

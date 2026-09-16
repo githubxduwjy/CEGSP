@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""CEGSP v2 P4: gap/cost closure for canonical CEGSP.
+"""TernRefine v2 P4: gap/cost closure for canonical TernRefine.
 
-This is a paper-closure experiment, not a new-module search.  It keeps CEGSP
+This is a paper-closure experiment, not a new-module search.  It keeps TernRefine
 as a post-training, optimizer-free support-relocation edit, while adding
 matched One-Step and short Multi-Step QAT-style controls that use the same
 initialization, fit/validation/untouched splits, and quantized-point gradient
@@ -67,7 +67,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--qat-steps", default="1,4")
     p.add_argument("--dtype", choices=["bf16", "fp32"], default="bf16")
     p.add_argument("--seed", type=int, default=20260827)
-    p.add_argument("--out-dir", default="/root/tqgsp-runs")
+    p.add_argument("--out-dir", default="results")
     return p.parse_args()
 
 
@@ -165,7 +165,7 @@ def tensor_spearman(x: List[float], y: List[float]) -> float:
     return float(np.corrcoef(rx, ry)[0, 1])
 
 
-def build_cegsp_layer_patches(
+def build_ternrefine_layer_patches(
     fp_qk: Dict[int, Dict[str, torch.Tensor]],
     grads: Dict[int, Dict[str, torch.Tensor]],
     layers: List[int],
@@ -408,7 +408,7 @@ def main() -> None:
     timing["ce_gradient_collection_sec"] = time.time() - t0
 
     t0 = time.time()
-    cegsp_patches, cegsp_traces = build_cegsp_layer_patches(
+    ternrefine_patches, ternrefine_traces = build_ternrefine_layer_patches(
         fp_qk,
         ce_grads,
         layers,
@@ -418,27 +418,27 @@ def main() -> None:
     )
     per_layer = []
     for layer in layers:
-        apply_qk_patch(model, layers, direct_qk, cegsp_patches, [layer])
+        apply_qk_patch(model, layers, direct_qk, ternrefine_patches, [layer])
         val_nll = evaluate_nll(model, val, device)
         per_layer.append(
             {
                 "layer": layer,
                 "single_layer_val_nll": float(val_nll),
                 "single_layer_delta_val_nll": float(val_nll - direct_nll["val"]),
-                **cegsp_traces[layer],
+                **ternrefine_traces[layer],
             }
         )
     ranked = sorted(per_layer, key=lambda r: float(r["single_layer_delta_val_nll"]))
     selected_layers = [int(r["layer"]) for r in ranked[: max(0, min(args.layer_topk, len(ranked)))]]
-    apply_qk_patch(model, layers, direct_qk, cegsp_patches, selected_layers)
-    cegsp_nll = {
+    apply_qk_patch(model, layers, direct_qk, ternrefine_patches, selected_layers)
+    ternrefine_nll = {
         "val": evaluate_nll(model, val, device),
         "untouched_w": evaluate_nll(model, untouched, device),
     }
     if untouched_c4:
-        cegsp_nll["untouched_c4"] = evaluate_nll(model, untouched_c4, device)
+        ternrefine_nll["untouched_c4"] = evaluate_nll(model, untouched_c4, device)
     restore_qk(model, layers, direct_qk)
-    timing["cegsp_edit_select_eval_sec"] = time.time() - t0
+    timing["ternrefine_edit_select_eval_sec"] = time.time() - t0
 
     t0 = time.time()
     score_report = score_validity(
@@ -484,7 +484,7 @@ def main() -> None:
     best_multi = min(multi_steps, key=lambda r: float(r["val_nll"])) if multi_steps else None
     denom = float(direct_nll["untouched_w"] - best_multi["untouched_w_nll"]) if best_multi else float("nan")
     gap_ratio = (
-        float((direct_nll["untouched_w"] - cegsp_nll["untouched_w"]) / denom)
+        float((direct_nll["untouched_w"] - ternrefine_nll["untouched_w"]) / denom)
         if best_multi and abs(denom) > 1e-12
         else float("nan")
     )
@@ -494,7 +494,7 @@ def main() -> None:
         else float("nan")
     )
     gap_ratio_c4 = (
-        float((direct_nll["untouched_c4"] - cegsp_nll["untouched_c4"]) / denom_c4)
+        float((direct_nll["untouched_c4"] - ternrefine_nll["untouched_c4"]) / denom_c4)
         if untouched_c4 and best_multi and abs(denom_c4) > 1e-12
         else float("nan")
     )
@@ -504,11 +504,11 @@ def main() -> None:
         "model": args.model,
         "config": vars(args),
         "validation_version": {
-            "name": "CEGSP-v2-P0-gap-and-score-validity",
-            "primary_question": "How much PTQ-QAT gap does canonical CEGSP close under matched data and measured cost?",
+            "name": "TernRefine-v2-P0-gap-and-score-validity",
+            "primary_question": "How much PTQ-QAT gap does canonical TernRefine close under matched data and measured cost?",
             "gates": {
                 "score_validity": "positive Spearman and top-score candidates improve more often than all sampled candidates",
-                "cegsp_vs_direct": "CEGSP selected edits should reduce validation NLL and preferably untouched NLL",
+                "ternrefine_vs_direct": "TernRefine selected edits should reduce validation NLL and preferably untouched NLL",
                 "qat_reference": "one-step or multi-step QAT should improve direct PTQ on validation or untouched, otherwise gap denominator is not meaningful",
                 "gap_ratio": "report W2 and C4 gap closure; do not use untouched to choose eta",
             },
@@ -517,10 +517,10 @@ def main() -> None:
             "uses_qat_teacher": False,
             "uses_qat_checkpoint": False,
             "uses_qat_logits": False,
-            "cegsp_uses_optimizer_steps": False,
-            "cegsp_uses_latent_fp_update": False,
+            "ternrefine_uses_optimizer_steps": False,
+            "ternrefine_uses_latent_fp_update": False,
             "qat_controls_use_latent_fp_update": True,
-            "alpha_frozen_for_cegsp": True,
+            "alpha_frozen_for_ternrefine": True,
         },
         "data": {
             "source": data_source,
@@ -545,14 +545,14 @@ def main() -> None:
             "fp_with_ppl": with_ppl(fp_nll),
             "direct_ternary": direct_nll,
             "direct_ternary_with_ppl": with_ppl(direct_nll),
-            "cegsp_topk": {
+            "ternrefine_topk": {
                 "selected_layers": selected_layers,
-                "nll": cegsp_nll,
-                "with_ppl": with_ppl(cegsp_nll),
-                "delta_vs_direct_val": float(cegsp_nll["val"] - direct_nll["val"]),
-                "delta_vs_direct_untouched_w": float(cegsp_nll["untouched_w"] - direct_nll["untouched_w"]),
+                "nll": ternrefine_nll,
+                "with_ppl": with_ppl(ternrefine_nll),
+                "delta_vs_direct_val": float(ternrefine_nll["val"] - direct_nll["val"]),
+                "delta_vs_direct_untouched_w": float(ternrefine_nll["untouched_w"] - direct_nll["untouched_w"]),
                 "delta_vs_direct_untouched_c4": (
-                    float(cegsp_nll["untouched_c4"] - direct_nll["untouched_c4"])
+                    float(ternrefine_nll["untouched_c4"] - direct_nll["untouched_c4"])
                     if untouched_c4
                     else None
                 ),
@@ -561,7 +561,7 @@ def main() -> None:
         },
         "gap_closure_ratio_untouched_vs_best_multistep_qat": gap_ratio,
         "gap_closure_ratio_c4_vs_best_multistep_qat": gap_ratio_c4,
-        "per_layer_cegsp": per_layer,
+        "per_layer_ternrefine": per_layer,
         "score_validity": score_report,
         "timing": timing,
         "status": "complete",

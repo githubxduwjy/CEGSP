@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """P11/P12: matched-budget allocation and signal-isolation experiments.
 
-This is a frozen, PTQ-only experiment for the CEGSP paper.  It starts from an
+This is a frozen, PTQ-only experiment for the TernRefine paper.  It starts from an
 ordinary affine ternary state, computes one CE gradient on the fit split, and
 compares legal active-to-zero/zero-to-sign relocations under a fixed budget.
 There is no QAT teacher, latent weight, optimizer update, or evaluation-driven
@@ -73,7 +73,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--grad-batches", type=int, default=1)
     p.add_argument("--dtype", choices=["bf16", "fp32"], default="bf16")
     p.add_argument("--seed", type=int, default=20260901)
-    p.add_argument("--out-dir", default="/root/tqgsp-runs")
+    p.add_argument("--out-dir", default="results")
     return p.parse_args()
 
 
@@ -520,7 +520,7 @@ def main() -> None:
     elapsed = time.time() - started
     result = {
         "run_id": args.run_id,
-        "experiment": "CEGSP P11/P12 matched-budget allocation and signal isolation",
+        "experiment": "TernRefine P11/P12 matched-budget allocation and signal isolation",
         "status": "complete",
         "config": vars(args),
         "protocol": {

@@ -59,7 +59,7 @@ def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser()
     p.add_argument("--model", default="facebook/opt-350m")
     p.add_argument("--run-id", required=True)
-    p.add_argument("--out-dir", default="/root/tqgsp-runs")
+    p.add_argument("--out-dir", default="results/table3_opt350m")
     p.add_argument("--layers", default=",".join(str(x) for x in LAYERS))
     p.add_argument("--offsets", default="0,1024,2048,3072,4096")
     p.add_argument("--seq-len", type=int, default=128)

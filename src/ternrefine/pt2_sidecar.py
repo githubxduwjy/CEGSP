@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""P9-S2: detached PT2 sidecar + frozen affine TernRefine plug-in test.
+"""PT2 sidecar export: detached PT2 sidecar + frozen affine TernRefine plug-in test.
 
 The script re-runs the official PT2 ATQ+SSR pipeline, exports the real ternary
 state and Q/K checkpoint to disk, then reloads those artifacts before running
@@ -400,7 +400,7 @@ def save_detached_artifacts(
 
     metadata = {
         "format": "TernRefine_P9S2_METADATA_V1",
-        "experiment": "P9-S2 detached PT2 plug-in interface",
+        "experiment": "PT2 sidecar export detached PT2 plug-in interface",
         "run_id": args.run_id,
         "pt2_root": args.pt2_root,
         "model": args.model,
@@ -650,9 +650,9 @@ def main() -> None:
     args = parse_args()
     started = time.time()
     if args.group_size != 128 or args.nsamples != 128 or args.calib_seq_len != 2048 or args.ppl_seq_len != 2048:
-        raise ValueError("P9-S2 is frozen to group=128, nsamples=128, calibration/eval seqlen=2048")
+        raise ValueError("PT2 sidecar export is frozen to group=128, nsamples=128, calibration/eval seqlen=2048")
     if not torch.cuda.is_available():
-        raise RuntimeError("P9-S2 requires CUDA")
+        raise RuntimeError("PT2 sidecar export requires CUDA")
     set_seed(args.seed)
     torch.manual_seed(args.seed)
     torch.backends.cuda.matmul.allow_tf32 = True
@@ -708,7 +708,7 @@ def main() -> None:
 
     result: Dict[str, object] = {
         "run_id": args.run_id,
-        "experiment": "P9-S2 detached PT2 sidecar plug-in + frozen affine-index TernRefine",
+        "experiment": "PT2 sidecar export detached PT2 sidecar plug-in + frozen affine-index TernRefine",
         "status": "detached_reload_passed" if parity["pass"] and detached_reload["pass"] else "detached_interface_failed",
         "config": vars(args),
         "protocol": {

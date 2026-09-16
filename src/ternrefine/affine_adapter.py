@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""P5-A: affine-ternary TernRefine adapter feasibility.
+"""affine adapter: affine-ternary TernRefine adapter feasibility.
 
 This experiment is intentionally small and protocol-focused.  It does not run
 PT² itself and it does not claim strong-baseline performance.  It checks whether
@@ -510,7 +510,7 @@ def main() -> None:
     )
     result = {
         "run_id": args.run_id,
-        "experiment": "TernRefine-P5-A affine ternary adapter feasibility",
+        "experiment": "TernRefine-affine adapter affine ternary adapter feasibility",
         "status": "complete",
         "config": vars(args),
         "wikitext_source": wikitext_source,

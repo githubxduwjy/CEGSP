@@ -504,7 +504,7 @@ def main() -> None:
         "model": args.model,
         "config": vars(args),
         "validation_version": {
-            "name": "TernRefine-v2-P0-gap-and-score-validity",
+            "name": "TernRefine gap-and-score validity-gap-and-score-validity",
             "primary_question": "How much PTQ-QAT gap does canonical TernRefine close under matched data and measured cost?",
             "gates": {
                 "score_validity": "positive Spearman and top-score candidates improve more often than all sampled candidates",

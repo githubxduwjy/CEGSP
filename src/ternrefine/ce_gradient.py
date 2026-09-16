@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""TernRefine-01A: CE-gradient support projection at ternary PTQ weights.
+"""QGP gradient utilities: CE-gradient support projection at ternary PTQ weights.
 
 Strict PTQ: no QAT teacher, no QAT checkpoint/logits/latent weights, no
 optimizer update.  We compute a small CE gradient at the deployed ternary point

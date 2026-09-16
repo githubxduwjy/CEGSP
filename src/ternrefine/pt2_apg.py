@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""PT2 + updated HBA on an already exported, auditable PT2 ternary state.
+"""PT2 + updated APG on an already exported, auditable PT2 ternary state.
 
 This runner deliberately does not re-run PT2 quantization or evaluate a new
-baseline.  It reloads the existing P9-S2 detached sidecar, computes exactly
+baseline.  It reloads the existing PT2 sidecar export, computes exactly
 one quantized-point CE gradient, builds one fixed QGP ranking over all Llama
-Q/K layers, and applies the updated HBA geometric-prefix stopping rule.
+Q/K layers, and applies the updated APG geometric-prefix stopping rule.
 The previously recorded PT2 metrics are read from --reference-json only for
 reporting deltas; they are never recomputed in this experiment.
 """
@@ -120,7 +120,7 @@ def apply_edit_list(codes: Dict[int, Dict[str, Any]], edits: Sequence[AffineEdit
         donor_key = (edit.layer, edit.key, edit.row, edit.block, edit.donor)
         receiver_key = (edit.layer, edit.key, edit.row, edit.block, edit.receiver)
         if donor_key in used or receiver_key in used:
-            raise RuntimeError(f"candidate collision in selected HBA prefix: {edit_key(edit)}")
+            raise RuntimeError(f"candidate collision in selected APG prefix: {edit_key(edit)}")
         state = states[edit.layer][edit.key]
         if int(state[edit.row, edit.block, edit.donor].item()) == 0:
             raise RuntimeError(f"invalid donor state for {edit_key(edit)}")
@@ -327,11 +327,11 @@ def main() -> None:
     args = parse_args()
     started = time.time()
     if args.group_size != 128 or args.calib_seq_len != 2048:
-        raise ValueError("frozen PT2+HBA protocol requires group_size=128 and calib_seq_len=2048")
+        raise ValueError("frozen PT2+APG protocol requires group_size=128 and calib_seq_len=2048")
     if args.grad_samples != 1:
-        raise ValueError("frozen PT2+HBA protocol requires exactly one gradient sample/batch")
+        raise ValueError("frozen PT2+APG protocol requires exactly one gradient sample/batch")
     if not torch.cuda.is_available():
-        raise RuntimeError("PT2+HBA requires CUDA")
+        raise RuntimeError("PT2+APG requires CUDA")
     set_seed(args.seed)
     torch.manual_seed(args.seed)
     torch.backends.cuda.matmul.allow_tf32 = True
@@ -364,7 +364,7 @@ def main() -> None:
     )
     if len(calib_loader) != args.calib_nsamples:
         raise RuntimeError(f"calibration sample mismatch {len(calib_loader)} != {args.calib_nsamples}")
-    log(f"rebuilding official PT2 deployment for HBA on {torch.cuda.get_device_name(0)}; baseline evaluation skipped")
+    log(f"rebuilding official PT2 deployment for APG on {torch.cuda.get_device_name(0)}; baseline evaluation skipped")
     model = pt2_quantize.get_model(args.model, args.calib_seq_len)
     model.seqlen = args.calib_seq_len
     pt2_quantize.quant_sequential(model, calib_loader, "cuda:0")
@@ -379,14 +379,14 @@ def main() -> None:
         result = {
             "status": "NOT_RUN_STATE_PARITY_FAILED",
             "run_id": args.run_id,
-            "experiment": "PT2 + updated HBA detached-state compatibility",
+            "experiment": "PT2 + updated APG detached-state compatibility",
             "config": vars(args),
             "state_parity": parity,
             "reference_pt2_metrics_not_recomputed": reference,
             "elapsed_sec": time.time() - started,
         }
-        (out / "pt2_hba_result.json").write_text(json.dumps(result, indent=2), encoding="utf-8")
-        log(f"state parity failed; wrote {out / 'pt2_hba_result.json'}")
+        (out / "pt2_apg_result.json").write_text(json.dumps(result, indent=2), encoding="utf-8")
+        log(f"state parity failed; wrote {out / 'pt2_apg_result.json'}")
         return
 
     if args.val_start + args.val_samples > len(calib_loader):
@@ -429,13 +429,13 @@ def main() -> None:
     layer_summary.sort(key=lambda row: (-row["top8_score_sum"], row["layer"]))
     manifest_hash = candidate_manifest(out / "candidate_manifest.jsonl", candidates_by_layer, layers)
 
-    # HBA is intentionally sequential: the first validation non-improvement
+    # APG is intentionally sequential: the first validation non-improvement
     # is the stopping event. Candidate generation above is vectorized/one-pass;
     # evaluating all future K values in parallel would change this protocol.
-    hba_rows: List[Dict[str, Any]] = []
+    apg_rows: List[Dict[str, Any]] = []
     baseline_row = row_for_patch(model, device, codes, perms, base_hash, [], val_batches, 0)
-    hba_rows.append(baseline_row)
-    log(f"HBA K=0: val_nll={baseline_row['validation_nll']:.8f} edits=0 baseline")
+    apg_rows.append(baseline_row)
+    log(f"APG K=0: val_nll={baseline_row['validation_nll']:.8f} edits=0 baseline")
     restore_qk(model, qk_checkpoint)
     previous_val = baseline_row["validation_nll"]
     selected_k = 0
@@ -443,8 +443,8 @@ def main() -> None:
     for k in GRID:
         selected = select_prefix(candidates_by_layer, k, layers)
         row = row_for_patch(model, device, codes, perms, base_hash, selected, val_batches, k)
-        hba_rows.append(row)
-        log(f"HBA K={k}: val_nll={row['validation_nll']:.8f} edits={row['num_relocations']}")
+        apg_rows.append(row)
+        log(f"APG K={k}: val_nll={row['validation_nll']:.8f} edits={row['num_relocations']}")
         if not (row["validation_nll"] < previous_val):
             stop_reason = f"first_non_improvement_at_K={k}"
             break
@@ -453,19 +453,19 @@ def main() -> None:
         # Restore the exact saved PT2 deployment state before the next prefix
         # evaluation; do not introduce a BF16 codebook-reconstruction drift.
         restore_qk(model, qk_checkpoint)
-    selected_row = next(row for row in hba_rows if row["k_per_layer"] == selected_k)
+    selected_row = next(row for row in apg_rows if row["k_per_layer"] == selected_k)
     selected_edits = select_prefix(candidates_by_layer, selected_k, layers)
     selected_states = apply_edit_list(codes, selected_edits)
     selected_audit = audit_all(codes, selected_states)
     selected_card = cardinality_violations(codes, selected_states)
     if not selected_row["legal"] or not selected_row["finite"]:
-        raise RuntimeError("selected HBA patch failed legal/finite validation")
+        raise RuntimeError("selected APG patch failed legal/finite validation")
 
-    log(f"evaluating selected PT2+HBA patch on official W2/C4 only; K*={selected_k}")
+    log(f"evaluating selected PT2+APG patch on official W2/C4 only; K*={selected_k}")
     apply_ssr_codes(model, codes, perms, selected_states)
     final_metrics = official_metrics(model, args.model, device, args.pt2_data_root, args.calib_seq_len)
     if not finite_metrics(final_metrics):
-        raise RuntimeError(f"selected PT2+HBA metrics are nonfinite: {final_metrics}")
+        raise RuntimeError(f"selected PT2+APG metrics are nonfinite: {final_metrics}")
     final_ppl = {
         "wikitext2_ppl": float(final_metrics["wikitext2_ppl"]),
         "c4_ppl": float(final_metrics["c4_ppl"]),
@@ -489,26 +489,26 @@ def main() -> None:
         "cardinality_violations": selected_card,
         "edit_ids": [edit_key(e) for e in selected_edits],
     }
-    (out / "hba_curve.json").write_text(json.dumps({"grid": [0, *list(GRID)], "rows": hba_rows, "selected_k": selected_k, "stop_reason": stop_reason}, indent=2), encoding="utf-8")
+    (out / "apg_curve.json").write_text(json.dumps({"grid": [0, *list(GRID)], "rows": apg_rows, "selected_k": selected_k, "stop_reason": stop_reason}, indent=2), encoding="utf-8")
     (out / "selected_patch.json").write_text(json.dumps(selected_patch, indent=2), encoding="utf-8")
 
     elapsed = time.time() - started
     result = {
         "status": "complete",
         "run_id": args.run_id,
-        "experiment": "PT2 + updated HBA detached-state compatibility",
+        "experiment": "PT2 + updated APG detached-state compatibility",
         "config": vars(args),
         "protocol": {
-            "pt2_state_source": "existing P9-S2 detached sidecar",
+            "pt2_state_source": "existing PT2 sidecar export",
             "full_pt2_deployment_rebuilt": True,
             "baseline_recomputed": False,
             "baseline_evaluation_skipped": True,
-            "hba_scope": "all 32 decoder layers, Q/K only",
+            "apg_scope": "all 32 decoder layers, Q/K only",
             "one_quantized_point_backward": True,
             "fixed_qgp_ranking": True,
-            "hba_grid": [0, *list(GRID)],
-            "hba_stop": "first strict validation non-improvement",
-            "hba_compares_first_prefix_to_q0": True,
+            "apg_grid": [0, *list(GRID)],
+            "apg_stop": "first strict validation non-improvement",
+            "apg_compares_first_prefix_to_q0": True,
             "no_rerank": True,
             "no_additional_backward_after_ranking": 0,
             "mu_alpha_frozen": True,
@@ -532,14 +532,14 @@ def main() -> None:
             "total_candidates": sum(len(x) for x in candidates_by_layer.values()),
             "layer_rows": layer_summary,
         },
-        "hba": {
+        "apg": {
             "baseline_row": baseline_row,
-            "curve": hba_rows,
+            "curve": apg_rows,
             "selected_k": int(selected_k),
             "stop_reason": stop_reason,
             "selected_patch": selected_patch,
         },
-        "pt2_plus_hba_metrics": {
+        "pt2_plus_apg_metrics": {
             "absolute_ppl": final_ppl,
             "absolute_nll": final_nll,
             "delta_vs_saved_pt2_nll": metric_delta(final_nll, reference_nll),
@@ -547,8 +547,8 @@ def main() -> None:
         },
         "gate": {
             "state_parity_pass": bool(parity.get("pass", False)),
-            "hba_validation_curve_finite": all(row["finite"] for row in hba_rows),
-            "hba_validation_curve_legal": all(row["legal"] for row in hba_rows),
+            "apg_validation_curve_finite": all(row["finite"] for row in apg_rows),
+            "apg_validation_curve_legal": all(row["legal"] for row in apg_rows),
             "selected_patch_exact_relocations": len(selected_edits) == len(layers) * selected_k,
             "selected_patch_exact_changed_coordinates": changed_coordinates(codes, selected_states) == 2 * len(layers) * selected_k,
             "selected_patch_finite": finite_metrics(final_ppl),
@@ -564,13 +564,13 @@ def main() -> None:
         },
         "timing": {
             "total_sec": elapsed,
-            "note": "HBA K evaluations are sequential by stopping definition; candidate construction is one vectorized pass.",
+            "note": "APG K evaluations are sequential by stopping definition; candidate construction is one vectorized pass.",
         },
     }
     (out / "config.json").write_text(json.dumps(vars(args), indent=2), encoding="utf-8")
-    (out / "pt2_hba_result.json").write_text(json.dumps(result, indent=2, ensure_ascii=False), encoding="utf-8")
+    (out / "pt2_apg_result.json").write_text(json.dumps(result, indent=2, ensure_ascii=False), encoding="utf-8")
     log(json.dumps(result["gate"], ensure_ascii=False))
-    log(f"wrote {out / 'pt2_hba_result.json'}")
+    log(f"wrote {out / 'pt2_apg_result.json'}")
 
 
 if __name__ == "__main__":

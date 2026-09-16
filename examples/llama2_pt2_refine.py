@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""PT2 + HBA replication across fitting slices on one frozen PT2 state.
+"""PT2 + APG replication across fitting slices on one frozen PT2 state.
 
 This runner reuses the audited detached PT2 sidecar and saved PT2 reference
 metrics.  It rebuilds the official PT2 deployment once, verifies state parity
-once, and then runs several TernRefine/HBA replicates that differ only in the
+once, and then runs several TernRefine/APG replicates that differ only in the
 single fitting calibration sample used for the quantized-point CE gradient.
 
 The selection slice is fixed across replicates, W2/C4 are untouched until each
@@ -47,7 +47,7 @@ from ternrefine.pt2_sidecar import (
     official_metrics,
     restore_qk,
 )
-from ternrefine.pt2_hba import (
+from ternrefine.pt2_apg import (
     GRID,
     apply_edit_list,
     candidate_manifest,
@@ -320,9 +320,9 @@ def run_one_replicate(
     }
     (rep_dir / "ranking_manifest.json").write_text(json.dumps(ranking_manifest, indent=2), encoding="utf-8")
 
-    hba_rows: List[Dict[str, Any]] = []
+    apg_rows: List[Dict[str, Any]] = []
     baseline_row = row_for_patch(model, device, codes, perms, base_hash, [], val_batches, 0)
-    hba_rows.append(baseline_row)
+    apg_rows.append(baseline_row)
     restore_qk(model, qk_checkpoint)
     ensure_model_on_device(model, device)
     previous_val = baseline_row["validation_nll"]
@@ -331,12 +331,12 @@ def run_one_replicate(
     for k in GRID:
         selected = select_prefix(candidates_by_layer, k, layers)
         row = row_for_patch(model, device, codes, perms, base_hash, selected, val_batches, k)
-        hba_rows.append(row)
+        apg_rows.append(row)
         (rep_dir / "apg_curve_partial.json").write_text(
             json.dumps(
                 {
                     "grid": [0, *list(GRID)],
-                    "completed_rows": hba_rows,
+                    "completed_rows": apg_rows,
                     "latest_k": k,
                     "selected_k_so_far": selected_k,
                     "stop_reason_so_far": stop_reason,
@@ -345,14 +345,14 @@ def run_one_replicate(
             ),
             encoding="utf-8",
         )
-        log(f"{rep_name}: HBA K={k} val_nll={row['validation_nll']:.8f} edits={row['num_relocations']}")
+        log(f"{rep_name}: APG K={k} val_nll={row['validation_nll']:.8f} edits={row['num_relocations']}")
         if not (row["validation_nll"] < previous_val):
             stop_reason = f"first_non_improvement_at_K={k}"
             (rep_dir / "apg_curve_partial.json").write_text(
                 json.dumps(
                     {
                         "grid": [0, *list(GRID)],
-                        "completed_rows": hba_rows,
+                        "completed_rows": apg_rows,
                         "latest_k": k,
                         "selected_k_so_far": selected_k,
                         "stop_reason_so_far": stop_reason,
@@ -371,9 +371,9 @@ def run_one_replicate(
     selected_states = apply_edit_list(codes, selected_edits)
     selected_audit = audit_all(codes, selected_states)
     selected_card = cardinality_violations(codes, selected_states)
-    selected_row = next(row for row in hba_rows if row["k_per_layer"] == selected_k)
+    selected_row = next(row for row in apg_rows if row["k_per_layer"] == selected_k)
     if not selected_row["legal"] or not selected_row["finite"]:
-        raise RuntimeError(f"{rep_name}: selected HBA patch failed legal/finite validation")
+        raise RuntimeError(f"{rep_name}: selected APG patch failed legal/finite validation")
 
     selected_patch = {
         "k_per_layer": int(selected_k),
@@ -406,7 +406,7 @@ def run_one_replicate(
     final_metrics = official_metrics(model, args.model, device, args.pt2_data_root, args.calib_seq_len)
     ensure_model_on_device(model, device)
     if not finite_metrics(final_metrics):
-        raise RuntimeError(f"{rep_name}: selected PT2+HBA metrics are nonfinite: {final_metrics}")
+        raise RuntimeError(f"{rep_name}: selected PT2+APG metrics are nonfinite: {final_metrics}")
     final_ppl = {
         "wikitext2_ppl": float(final_metrics["wikitext2_ppl"]),
         "c4_ppl": float(final_metrics["c4_ppl"]),
@@ -419,7 +419,7 @@ def run_one_replicate(
     delta_nll = metric_delta(final_nll, reference_nll)
 
     (rep_dir / "apg_curve.json").write_text(
-        json.dumps({"grid": [0, *list(GRID)], "rows": hba_rows, "selected_k": selected_k, "stop_reason": stop_reason}, indent=2),
+        json.dumps({"grid": [0, *list(GRID)], "rows": apg_rows, "selected_k": selected_k, "stop_reason": stop_reason}, indent=2),
         encoding="utf-8",
     )
     (rep_dir / "selected_patch.json").write_text(json.dumps(selected_patch, indent=2), encoding="utf-8")
@@ -432,7 +432,7 @@ def run_one_replicate(
         "data": data_manifest,
         "gradient_audit": grad_audit,
         "ranking_manifest": ranking_manifest,
-        "apg": {"baseline_row": baseline_row, "curve": hba_rows, "selected_k": int(selected_k), "stop_reason": stop_reason},
+        "apg": {"baseline_row": baseline_row, "curve": apg_rows, "selected_k": int(selected_k), "stop_reason": stop_reason},
         "selected_patch": selected_patch,
         "metrics": {
             "absolute_ppl": final_ppl,
@@ -444,8 +444,8 @@ def run_one_replicate(
             "gradient_finite": bool(grad_audit["all_gradient_tensors_finite"]),
             "backward_count_is_one": True,
             "rerank_count_is_zero": True,
-            "apg_curve_finite": all(row["finite"] for row in hba_rows),
-            "apg_curve_legal": all(row["legal"] for row in hba_rows),
+            "apg_curve_finite": all(row["finite"] for row in apg_rows),
+            "apg_curve_legal": all(row["legal"] for row in apg_rows),
             "selected_patch_exact_relocations": len(selected_edits) == len(layers) * selected_k,
             "selected_patch_exact_changed_coordinates": changed_coordinates(codes, selected_states) == 2 * len(layers) * selected_k,
             "selected_patch_legal": selected_audit["total_illegal_states"] == 0 and selected_card == 0,
@@ -463,9 +463,9 @@ def main() -> None:
     args = parse_args()
     started = time.time()
     if args.group_size != 128 or args.calib_seq_len != 2048:
-        raise ValueError("PT2+HBA replication requires group_size=128 and calib_seq_len=2048")
+        raise ValueError("PT2+APG replication requires group_size=128 and calib_seq_len=2048")
     if not torch.cuda.is_available():
-        raise RuntimeError("PT2+HBA replication requires CUDA")
+        raise RuntimeError("PT2+APG replication requires CUDA")
 
     set_seed(args.seed)
     torch.manual_seed(args.seed)
@@ -545,13 +545,13 @@ def main() -> None:
             "pt2_state_fingerprint": state_fingerprint,
             "elapsed_sec": time.time() - started,
         }
-        (out / "pt2_hba_replication_result.json").write_text(json.dumps(result, indent=2), encoding="utf-8")
+        (out / "pt2_apg_replication_result.json").write_text(json.dumps(result, indent=2), encoding="utf-8")
         log("state parity failed; wrote failure summary")
         return
 
     selection_hash = batches_hash([calib_loader[i][0] for i in range(args.val_start, args.val_start + args.val_samples)])
     prereg = {
-        "experiment": "PT2 + HBA fitting-split replication",
+        "experiment": "PT2 + APG fitting-split replication",
         "question": "Same frozen official PT2 state, different fitting calibration sample, same selection split.",
         "fit_indices": fit_indices,
         "nominal_fit_token_offsets": [i * args.calib_seq_len for i in fit_indices],
@@ -610,7 +610,7 @@ def main() -> None:
     result = {
         "status": "complete",
         "run_id": args.run_id,
-        "experiment": "PT2 + HBA fitting-split replication on frozen official PT2 state",
+        "experiment": "PT2 + APG fitting-split replication on frozen official PT2 state",
         "config": vars(args),
         "protocol": prereg,
         "pt2_state_fingerprint": state_fingerprint,
@@ -680,13 +680,13 @@ def main() -> None:
         },
         "timing": {
             "total_sec": time.time() - started,
-            "note": "The PT2 deployment is loaded from a frozen checkpoint when --pt2-checkpoint is provided; otherwise it is rebuilt once. Replicate HBA curves are sequential because each has its own first-non-improvement stopping rule.",
+            "note": "The PT2 deployment is loaded from a frozen checkpoint when --pt2-checkpoint is provided; otherwise it is rebuilt once. Replicate APG curves are sequential because each has its own first-non-improvement stopping rule.",
         },
     }
-    (out / "pt2_hba_replication_result.json").write_text(json.dumps(result, indent=2, ensure_ascii=False), encoding="utf-8")
+    (out / "pt2_apg_replication_result.json").write_text(json.dumps(result, indent=2, ensure_ascii=False), encoding="utf-8")
     log(json.dumps(result["gate"], ensure_ascii=False))
     log(json.dumps(result["outcome"], ensure_ascii=False))
-    log(f"wrote {out / 'pt2_hba_replication_result.json'}")
+    log(f"wrote {out / 'pt2_apg_replication_result.json'}")
 
 
 if __name__ == "__main__":

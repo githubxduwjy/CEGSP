@@ -78,6 +78,11 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--eval-pack-factor", type=int, default=1)
     p.add_argument("--dtype", choices=["bf16", "fp32"], default="bf16")
     p.add_argument("--seed", type=int, default=20260910)
+    p.add_argument(
+        "--allow-synthetic-fallback",
+        action="store_true",
+        help="Allow deterministic synthetic text when WikiText-2 cannot be loaded. This is only for plumbing/debug runs, not Table 3 reproduction.",
+    )
     return p.parse_args()
 
 
@@ -295,6 +300,13 @@ def main() -> None:
             fit_offset,
             args.val_token_offset,
         )
+        if wikitext_source.startswith("deterministic-fallback") and not args.allow_synthetic_fallback:
+            raise RuntimeError(
+                "Official Table 3 reproduction requires WikiText-2. "
+                "Synthetic fallback text is only allowed for smoke/plumbing runs; "
+                "rerun with a working datasets installation, a populated HF_DATASETS_CACHE, "
+                "or pass --allow-synthetic-fallback for debugging only."
+            )
         c4 = build_c4_cached_batches(tokenizer, args.seq_len, args.batch_size, args.c4_batches, args.c4_token_offset)
         fit_eval = pack_batches(fit, args.eval_pack_factor)
         val_eval = pack_batches(val, args.eval_pack_factor)

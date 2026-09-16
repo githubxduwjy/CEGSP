@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""P11/P12: matched-budget allocation and signal-isolation experiments.
+"""Matched allocation and reconstruction-control experiments.
 
 This is a frozen, PTQ-only experiment for the TernRefine paper.  It starts from an
 ordinary affine ternary state, computes one CE gradient on the fit split, and
@@ -7,9 +7,10 @@ compares legal active-to-zero/zero-to-sign relocations under a fixed budget.
 There is no QAT teacher, latent weight, optimizer update, or evaluation-driven
 selection.
 
-P11 changes only model-level allocation (HBA, flat-global, uniform and fixed
-random-layer controls).  P12-A fixes the HBA layer allocation and changes only
-the ranking signal from quantized-point CE to weight reconstruction error.
+The allocation-control study changes only model-level allocation: APG,
+flat-global, uniform, and fixed random-layer controls. The reconstruction-control
+study fixes the APG layer allocation and changes only the ranking signal:
+quantized-point CE score versus weight-reconstruction score.
 """
 
 from __future__ import annotations
@@ -66,8 +67,8 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--group-size", type=int, default=128)
     p.add_argument("--threshold-factor", type=float, default=0.75)
     p.add_argument("--edits-total", type=int, default=384)
-    p.add_argument("--hba-layers", type=int, default=6)
-    p.add_argument("--edits-per-hba-layer", type=int, default=64)
+    p.add_argument("--apg-layers", type=int, default=6)
+    p.add_argument("--edits-per-apg-layer", type=int, default=64)
     p.add_argument("--uniform-edits-per-layer", type=int, default=16)
     p.add_argument("--layer-probe-edits", type=int, default=8)
     p.add_argument("--grad-batches", type=int, default=1)
@@ -311,16 +312,16 @@ def main() -> None:
     dtype = torch.bfloat16 if args.dtype == "bf16" else torch.float32
     layers = parse_csv_ints(args.layers)
     if layers != LAYERS:
-        raise ValueError("P11/P12 frozen protocol requires all OPT-350M layers 0--23")
+        raise ValueError("matched allocation and reconstruction-control frozen protocol requires all OPT-350M layers 0--23")
     if args.group_size != 128 or args.edits_total != 384:
-        raise ValueError("P11/P12 frozen protocol requires group_size=128 and edits_total=384")
-    if args.hba_layers != 6 or args.edits_per_hba_layer != 64 or args.uniform_edits_per_layer != 16:
-        raise ValueError("P11/P12 frozen allocation is HBA=6x64 and Uniform=24x16")
+        raise ValueError("matched allocation and reconstruction-control frozen protocol requires group_size=128 and edits_total=384")
+    if args.apg_layers != 6 or args.edits_per_apg_layer != 64 or args.uniform_edits_per_layer != 16:
+        raise ValueError("matched allocation and reconstruction-control frozen allocation is APG=6x64 and Uniform=24x16")
 
     out_dir = Path(args.out_dir) / args.run_id
     out_dir.mkdir(parents=True, exist_ok=True)
     log(
-        f"P11/P12 loading {args.model} dtype={args.dtype} "
+        f"matched allocation and reconstruction-control loading {args.model} dtype={args.dtype} "
         f"gpu={torch.cuda.get_device_name(0)} layers=24"
     )
 
@@ -422,27 +423,27 @@ def main() -> None:
     timing["candidate_build_sec"] = time.time() - t0
     log(f"candidate pool={len(all_candidates)} task_vs_reconstruction_rank_corr={task_rec_rank_corr}")
 
-    hba_layers = [int(row["layer"]) for row in layer_ranking_rows[: args.hba_layers]]
-    hba_task = select_layerwise(candidates_by_layer, hba_layers, args.edits_per_hba_layer)
+    apg_layers = [int(row["layer"]) for row in layer_ranking_rows[: args.apg_layers]]
+    apg_task = select_layerwise(candidates_by_layer, apg_layers, args.edits_per_apg_layer)
     flat_task = select_unique_edits(all_candidates, args.edits_total)
     uniform = select_layerwise(candidates_by_layer, layers, args.uniform_edits_per_layer)
-    if len(hba_task) != args.edits_total or len(flat_task) != args.edits_total or len(uniform) != args.edits_total:
-        raise RuntimeError("one P11 selection failed to meet the exact 384-edit budget")
+    if len(apg_task) != args.edits_total or len(flat_task) != args.edits_total or len(uniform) != args.edits_total:
+        raise RuntimeError("one allocation-control selection failed to meet the exact 384-edit budget")
 
     random_layer_selections: Dict[str, Dict[str, object]] = {}
     random_layer_task: Dict[str, List[AffineEdit]] = {}
     for seed in PRIMARY_RANDOM_SEEDS:
         rng = random.Random(seed)
-        selected = sorted(rng.sample(layers, args.hba_layers))
-        edits = select_layerwise(candidates_by_layer, selected, args.edits_per_hba_layer)
+        selected = sorted(rng.sample(layers, args.apg_layers))
+        edits = select_layerwise(candidates_by_layer, selected, args.edits_per_apg_layer)
         name = f"random_layer_qgp_seed{seed}"
         random_layer_selections[name] = {"seed": seed, "selected_layers": selected}
         random_layer_task[name] = edits
 
-    reconstruction_hba = select_layerwise(
+    reconstruction_apg = select_layerwise(
         candidates_by_layer,
-        hba_layers,
-        args.edits_per_hba_layer,
+        apg_layers,
+        args.edits_per_apg_layer,
         reconstruction_by_id,
     )
     reconstruction_global_candidates = sorted(
@@ -450,14 +451,14 @@ def main() -> None:
         key=lambda e: (-reconstruction_by_id[edit_id(e)], edit_id(e)),
     )
     reconstruction_global = select_unique_edits(reconstruction_global_candidates, args.edits_total)
-    if len(reconstruction_hba) != args.edits_total or len(reconstruction_global) != args.edits_total:
-        raise RuntimeError("one P12 selection failed to meet the exact 384-edit budget")
+    if len(reconstruction_apg) != args.edits_total or len(reconstruction_global) != args.edits_total:
+        raise RuntimeError("one reconstruction-control selection failed to meet the exact 384-edit budget")
 
     selections: Dict[str, List[AffineEdit]] = {
-        "hba_task": hba_task,
+        "apg_task": apg_task,
         "flat_global_task": flat_task,
         "uniform_task": uniform,
-        "reconstruction_hba": reconstruction_hba,
+        "reconstruction_apg": reconstruction_apg,
         "reconstruction_global": reconstruction_global,
         **random_layer_task,
     }
@@ -509,19 +510,19 @@ def main() -> None:
     def nll(name: str, split: str) -> float:
         return float(variants[name]["metrics"][split]["nll"])
 
-    p11_hba = variants["hba_task"]
-    p11_uniform = variants["uniform_task"]
-    p11_flat = variants["flat_global_task"]
-    hba_better_uniform_w2 = nll("hba_task", "wikitext2_untouched") < nll("uniform_task", "wikitext2_untouched")
-    hba_better_uniform_c4 = nll("hba_task", "c4_untouched") < nll("uniform_task", "c4_untouched")
-    hba_not_worse_flat_w2 = nll("hba_task", "wikitext2_untouched") <= nll("flat_global_task", "wikitext2_untouched")
-    hba_not_worse_flat_c4 = nll("hba_task", "c4_untouched") <= nll("flat_global_task", "c4_untouched")
-    if hba_better_uniform_w2 and hba_better_uniform_c4 and hba_not_worse_flat_w2 and hba_not_worse_flat_c4:
-        p11_classification = "STRONG_PASS"
-    elif hba_better_uniform_w2 and hba_better_uniform_c4:
-        p11_classification = "PASS_BOUNDED"
+    allocation_apg = variants["apg_task"]
+    allocation_uniform = variants["uniform_task"]
+    allocation_flat = variants["flat_global_task"]
+    apg_better_uniform_w2 = nll("apg_task", "wikitext2_untouched") < nll("uniform_task", "wikitext2_untouched")
+    apg_better_uniform_c4 = nll("apg_task", "c4_untouched") < nll("uniform_task", "c4_untouched")
+    apg_not_worse_flat_w2 = nll("apg_task", "wikitext2_untouched") <= nll("flat_global_task", "wikitext2_untouched")
+    apg_not_worse_flat_c4 = nll("apg_task", "c4_untouched") <= nll("flat_global_task", "c4_untouched")
+    if apg_better_uniform_w2 and apg_better_uniform_c4 and apg_not_worse_flat_w2 and apg_not_worse_flat_c4:
+        allocation_control_classification = "STRONG_PASS"
+    elif apg_better_uniform_w2 and apg_better_uniform_c4:
+        allocation_control_classification = "PASS_BOUNDED"
     else:
-        p11_classification = "NEGATIVE"
+        allocation_control_classification = "NEGATIVE"
 
     legality_pass = baseline_audit["total_illegal_states"] == 0
     finite_pass = finite_metrics(fp_metrics) and finite_metrics(affine_metrics)
@@ -537,7 +538,7 @@ def main() -> None:
     elapsed = time.time() - started
     result = {
         "run_id": args.run_id,
-        "experiment": "TernRefine P11/P12 matched-budget allocation and signal isolation",
+        "experiment": "TernRefine matched allocation and reconstruction-control matched-budget allocation and signal isolation",
         "status": "complete",
         "config": vars(args),
         "protocol": {
@@ -554,11 +555,11 @@ def main() -> None:
             "qat_checkpoint_or_latent_weight": False,
             "optimizer_update": False,
             "action_space": "same-group active-to-zero plus zero-to-sign, fixed cardinality",
-            "hba_rule": "top 6 layers by sum of top 8 task-score candidates; 64 per layer",
+            "apg_rule": "top 6 layers by sum of top 8 task-score candidates; 64 per layer",
             "flat_rule": "global task-score ranking with select_unique_edits",
             "uniform_rule": "all 24 layers x 16 task-score candidates",
             "random_rule": "three fixed random 6-layer selections, QGP top 64 per layer",
-            "p12_rule": "same HBA layers and 64/layer; replace task score with exact FP-weight MSE decrease",
+            "reconstruction_control_rule": "same APG layers and 64/layer; replace task score with exact FP-weight MSE decrease",
         },
         "data": {
             "wikitext_source": wikitext_source,
@@ -588,36 +589,36 @@ def main() -> None:
             "task_vs_reconstruction_rank_correlation": task_rec_rank_corr,
             "layer_ranking_by_task": layer_ranking_rows,
         },
-        "p11": {
-            "hba_layers": hba_layers,
+        "allocation_control": {
+            "apg_layers": apg_layers,
             "variants": {
                 name: variants[name]
-                for name in ["hba_task", "flat_global_task", "uniform_task", *random_layer_task.keys()]
+                for name in ["apg_task", "flat_global_task", "uniform_task", *random_layer_task.keys()]
             },
             "gate": {
                 "legality_pass": legality_pass,
                 "finite_pass": finite_pass,
-                "hba_better_uniform_w2": hba_better_uniform_w2,
-                "hba_better_uniform_c4": hba_better_uniform_c4,
-                "hba_not_worse_flat_w2": hba_not_worse_flat_w2,
-                "hba_not_worse_flat_c4": hba_not_worse_flat_c4,
-                "classification": p11_classification,
+                "apg_better_uniform_w2": apg_better_uniform_w2,
+                "apg_better_uniform_c4": apg_better_uniform_c4,
+                "apg_not_worse_flat_w2": apg_not_worse_flat_w2,
+                "apg_not_worse_flat_c4": apg_not_worse_flat_c4,
+                "classification": allocation_control_classification,
             },
         },
-        "p12_a": {
-            "fixed_hba_layers": hba_layers,
+        "reconstruction_control": {
+            "fixed_apg_layers": apg_layers,
             "variants": {
-                "ternrefine_hba": variants["hba_task"],
-                "reconstruction_cpsr_hba": variants["reconstruction_hba"],
+                "ternrefine_apg": variants["apg_task"],
+                "reconstruction_cpsr_apg": variants["reconstruction_apg"],
                 "reconstruction_global": variants["reconstruction_global"],
             },
             "signal_isolation": {
-                "task_variant_name": "hba_task",
-                "reconstruction_variant_name": "reconstruction_hba",
-                "same_layer_set": variants["hba_task"]["selected_layers"] == variants["reconstruction_hba"]["selected_layers"],
-                "same_num_edits": variants["hba_task"]["num_edits"] == variants["reconstruction_hba"]["num_edits"],
-                "task_better_w2": nll("hba_task", "wikitext2_untouched") < nll("reconstruction_hba", "wikitext2_untouched"),
-                "task_better_c4": nll("hba_task", "c4_untouched") < nll("reconstruction_hba", "c4_untouched"),
+                "task_variant_name": "apg_task",
+                "reconstruction_variant_name": "reconstruction_apg",
+                "same_layer_set": variants["apg_task"]["selected_layers"] == variants["reconstruction_apg"]["selected_layers"],
+                "same_num_edits": variants["apg_task"]["num_edits"] == variants["reconstruction_apg"]["num_edits"],
+                "task_better_w2": nll("apg_task", "wikitext2_untouched") < nll("reconstruction_apg", "wikitext2_untouched"),
+                "task_better_c4": nll("apg_task", "c4_untouched") < nll("reconstruction_apg", "c4_untouched"),
             },
             "external_reconstruction_baseline_status": "not_run_in_this_anonymous_artifact",
         },
@@ -625,12 +626,12 @@ def main() -> None:
         "gate": {
             "legality_pass": legality_pass,
             "finite_pass": finite_pass,
-            "p11_classification": p11_classification,
-            "p12_signal_isolation_complete": True,
+            "allocation_control_classification": allocation_control_classification,
+            "reconstruction_signal_isolation_complete": True,
             "exact_budget_all_variants": all(row["num_edits"] == 384 and row["changed_coordinates"] == 768 for row in variants.values()),
         },
     }
-    out_path = out_dir / "p11_p12_result.json"
+    out_path = out_dir / "matched_controls_result.json"
     out_path.write_text(json.dumps(result, indent=2, ensure_ascii=False))
     log(f"wrote {out_path}")
     log(json.dumps(result["gate"], indent=2, ensure_ascii=False))

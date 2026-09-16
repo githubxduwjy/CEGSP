@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""P7: A100 smoke and 7B/8B frozen-canonical affine TernRefine scaling.
+"""large-model affine: A100 smoke and 7B/8B frozen-canonical affine TernRefine scaling.
 
 This script keeps the P5-B affine TernRefine rule intact while replacing the
 OPT-only adapter with a generic Q/K projection adapter for common decoder-only
@@ -93,7 +93,7 @@ def target_qk(model: torch.nn.Module, layer_idx: int) -> Dict[str, ProjectionRef
         hidden = int(model.config.hidden_size)
         if int(fused.out_features) != 3 * hidden:
             raise RuntimeError("fused query_key_value layout is not q,k,v by hidden-size rows")
-        raise RuntimeError("fused QKV layers are not enabled in P7 scaling script")
+        raise RuntimeError("fused QKV layers are not enabled in large-model affine scaling script")
     raise RuntimeError(f"layer {layer_idx} has no recognized q/k projection")
 
 
@@ -443,7 +443,7 @@ def main() -> None:
     torch.backends.cuda.matmul.allow_tf32 = True
     torch.backends.cudnn.allow_tf32 = True
     if not torch.cuda.is_available():
-        raise RuntimeError("P7 requires CUDA")
+        raise RuntimeError("large-model affine requires CUDA")
     device = torch.device("cuda")
     dtype = torch.bfloat16 if args.dtype == "bf16" else torch.float32
     out_dir = Path(args.out_dir) / args.run_id
@@ -482,7 +482,7 @@ def main() -> None:
         grad_norms = {str(layer): {key: float(value.norm().item()) for key, value in layer_grads.items()} for layer, layer_grads in grads.items()}
         result = {
             "run_id": args.run_id,
-            "experiment": "TernRefine-P7-S0 A100 8B memory smoke",
+            "experiment": "TernRefine-large-model affine-S0 A100 8B memory smoke",
             "status": "complete",
             "config": vars(args),
             "data_source": data_source,
@@ -498,7 +498,7 @@ def main() -> None:
             "finite_pass": math.isfinite(fp_metrics["val"]) and all(math.isfinite(v) for x in grad_norms.values() for v in x.values()),
             "elapsed_sec": time.time() - started,
         }
-        out_path = out_dir / "p7_s0_smoke_result.json"
+        out_path = out_dir / "large_model_smoke_result.json"
         out_path.write_text(json.dumps(result, indent=2, ensure_ascii=False))
         log(f"wrote {out_path}")
         return
@@ -564,7 +564,7 @@ def main() -> None:
 
     result = {
         "run_id": args.run_id,
-        "experiment": "TernRefine-P7-A/B A100 frozen-canonical affine scaling",
+        "experiment": "TernRefine-large-model affine-A/B A100 frozen-canonical affine scaling",
         "status": "complete",
         "config": vars(args),
         "data_source": data_source,
@@ -589,7 +589,7 @@ def main() -> None:
         "variants": variants,
         "elapsed_sec": time.time() - started,
     }
-    out_path = out_dir / "p7_affine_scaling_result.json"
+    out_path = out_dir / "large_model_affine_scaling_result.json"
     out_path.write_text(json.dumps(result, indent=2, ensure_ascii=False))
     log(f"wrote {out_path}")
 

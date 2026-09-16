@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Clean-room ternary support-projection validation.
 
-This script tests the narrowed post-TDBT claim:
+This script tests the narrowed PTQ claim:
 
     Ternary zero-support structure gives quantized-point gradients a useful
     PTQ-only projection target: exchange one active ternary weight with one

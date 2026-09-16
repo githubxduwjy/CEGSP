@@ -41,12 +41,22 @@ The artifact deliberately omits raw result directories, model checkpoints, datas
 
 ## Quick Start
 
-CPU-only invariant checks:
+CPU-only invariant checks use only the package itself:
 
 ```bash
 python -m pip install -e .
 python examples/smoke_test.py
 python -m unittest discover -s tests
+```
+
+Full experiment runners require the ML stack in `requirements.txt`. Install
+PyTorch from the CUDA wheel index appropriate for your machine, then install
+the remaining dependencies and this package:
+
+```bash
+python -m pip install --index-url https://download.pytorch.org/whl/cu124 torch==2.5.1
+python -m pip install -r requirements.txt
+python -m pip install -e .
 ```
 
 Patch/result metadata audit:

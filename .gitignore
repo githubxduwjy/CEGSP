@@ -19,16 +19,14 @@ __pycache__/
 *.log
 .env
 .env.*
-.aris/
-autoresearch/.git/
-autoresearch/.venv/
-autoresearch/PTQ_AUTORESEARCH_STATE*.json
-autoresearch/ptq_results.tsv
-autoresearch/analysis.ipynb
-autoresearch/progress.png
+*.sqlite
+*.db
+*.state.json
+.ipynb_checkpoints/
 
 # Local migration snapshots and editor files
-migration_*/
+scratch/
+tmp/
 .idea/
 .vscode/
 *.swp

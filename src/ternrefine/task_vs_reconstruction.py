@@ -224,56 +224,73 @@ def build_c4_cached_batches(
     n_batches: int,
     token_offset: int,
 ) -> List[torch.Tensor]:
-    """Read the already cached C4 validation Arrow directly.
-
-    The remote image currently has a broken pandas import inside ``datasets``;
-    using the cached Arrow keeps the pre-registered C4 split unchanged and
-    avoids installing or upgrading any package during the experiment.
-    """
+    """Build C4 validation batches from cache, falling back to streaming download."""
     if n_batches <= 0:
         return []
-    try:
-        import pyarrow as pa
-        import pyarrow.ipc as ipc
-    except Exception as exc:
-        raise RuntimeError(f"pyarrow is required for cached C4: {exc}") from exc
 
     cache_root = Path(
         os.environ.get("HF_DATASETS_CACHE", str(Path.home() / ".cache/huggingface/datasets"))
     )
     paths = sorted(cache_root.glob("allenai___c4/**/c4-validation.arrow"))
-    if not paths:
-        raise FileNotFoundError(f"C4 validation Arrow not found under {cache_root}")
     needed = token_offset + n_batches * batch_size * (seq_len + 1)
     token_chunks: List[torch.Tensor] = []
     total = 0
-    for path in paths:
-        with pa.memory_map(str(path), "r") as source:
-            try:
-                reader = ipc.open_file(source)
-                batches = (reader.get_batch(i) for i in range(reader.num_record_batches))
-            except Exception:
-                source.seek(0)
-                reader = ipc.open_stream(source)
-                batches = iter(reader)
-            for record_batch in batches:
-                texts = record_batch.column("text").to_pylist()
-                for text in texts:
-                    if not isinstance(text, str) or not text.strip():
-                        continue
-                    ids = tokenizer(text, add_special_tokens=False, return_tensors="pt")["input_ids"][0]
-                    if ids.numel() == 0:
-                        continue
-                    token_chunks.append(ids.cpu())
-                    total += int(ids.numel())
+
+    if paths:
+        try:
+            import pyarrow as pa
+            import pyarrow.ipc as ipc
+        except Exception as exc:
+            raise RuntimeError(f"pyarrow is required to read cached C4 Arrow files: {exc}") from exc
+
+        for path in paths:
+            with pa.memory_map(str(path), "r") as source:
+                try:
+                    reader = ipc.open_file(source)
+                    batches = (reader.get_batch(i) for i in range(reader.num_record_batches))
+                except Exception:
+                    source.seek(0)
+                    reader = ipc.open_stream(source)
+                    batches = iter(reader)
+                for record_batch in batches:
+                    texts = record_batch.column("text").to_pylist()
+                    for text in texts:
+                        if not isinstance(text, str) or not text.strip():
+                            continue
+                        ids = tokenizer(text, add_special_tokens=False, return_tensors="pt")["input_ids"][0]
+                        if ids.numel() == 0:
+                            continue
+                        token_chunks.append(ids.cpu())
+                        total += int(ids.numel())
+                        if total >= needed:
+                            break
                     if total >= needed:
                         break
-                if total >= needed:
-                    break
-        if total >= needed:
-            break
+            if total >= needed:
+                break
+    else:
+        try:
+            from datasets import load_dataset
+        except Exception as exc:
+            raise RuntimeError(
+                "C4 cache is absent and the datasets package is unavailable; "
+                "pre-populate HF_DATASETS_CACHE or install datasets."
+            ) from exc
+        ds = load_dataset("allenai/c4", "en", split="validation", streaming=True)
+        for row in ds:
+            text = row.get("text", "")
+            if not isinstance(text, str) or not text.strip():
+                continue
+            ids = tokenizer(text, add_special_tokens=False, return_tensors="pt")["input_ids"][0]
+            if ids.numel() == 0:
+                continue
+            token_chunks.append(ids.cpu())
+            total += int(ids.numel())
+            if total >= needed:
+                break
+
     if total < needed:
-        raise RuntimeError(f"not enough cached C4 tokens: have={total} need={needed}")
+        raise RuntimeError(f"not enough C4 tokens: have={total} need={needed}")
     ids = torch.cat(token_chunks, dim=0)[token_offset:needed]
     return [x.clone() for x in ids.view(n_batches, batch_size, seq_len + 1)]
 

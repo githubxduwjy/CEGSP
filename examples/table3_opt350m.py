@@ -52,7 +52,7 @@ from ternrefine.affine_adapter import (
     snapshot_qk,
     with_ppl,
 )
-from ternrefine.data_eval import evaluate_nll, log, parse_csv_ints, read_wikitext_arrow_cache
+from ternrefine.data_eval import build_wikitext_splits, evaluate_nll, log, parse_csv_ints
 
 
 def parse_args() -> argparse.Namespace:
@@ -195,35 +195,6 @@ def top_stats(rows: List[Dict[str, object]], score_key: str, delta_key: str) -> 
     return out
 
 
-def build_wikitext_splits_arrow(
-    tokenizer: AutoTokenizer,
-    seq_len: int,
-    batch_size: int,
-    fit_batches: int,
-    val_batches: int,
-    untouched_batches: int,
-    fit_token_offset: int,
-    val_token_offset: int,
-) -> Tuple[List[torch.Tensor], List[torch.Tensor], List[torch.Tensor], str]:
-    train_text, valid_text = read_wikitext_arrow_cache()
-
-    def make(text: str, n_batches: int, offset: int) -> List[torch.Tensor]:
-        ids = tokenizer(text, add_special_tokens=False, return_tensors="pt")["input_ids"][0]
-        needed = n_batches * batch_size * (seq_len + 1)
-        if ids.numel() < offset + needed:
-            raise RuntimeError(f"not enough tokens for split: have={ids.numel()} need={offset + needed}")
-        return [
-            x.clone()
-            for x in ids[offset : offset + needed].view(n_batches, batch_size, seq_len + 1)
-        ]
-
-    fit = make(train_text, fit_batches, fit_token_offset)
-    val = make(valid_text, val_batches, val_token_offset)
-    untouched_offset = val_token_offset + val_batches * batch_size * (seq_len + 1)
-    untouched = make(valid_text, untouched_batches, untouched_offset)
-    return fit, val, untouched, "wikitext-2-raw-v1-arrow-cache"
-
-
 def evaluate_one_edit(
     model: torch.nn.Module,
     codes: Dict[int, Dict[str, AffineCode]],
@@ -314,7 +285,7 @@ def main() -> None:
 
         t0 = time.time()
         log(f"E1 offset={fit_offset} start")
-        fit, val, w2, wikitext_source = build_wikitext_splits_arrow(
+        fit, val, w2, wikitext_source = build_wikitext_splits(
             tokenizer,
             args.seq_len,
             args.batch_size,

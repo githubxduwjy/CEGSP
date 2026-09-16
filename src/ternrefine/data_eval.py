@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Clean-room TQG-SP support-projection validation.
+"""Clean-room ternary support-projection validation.
 
 This script tests the narrowed post-TDBT claim:
 
@@ -888,13 +888,13 @@ def main() -> None:
             variants: List[Dict[str, object]] = []
             random_states, random_trace = run_one_shot(base_states, codes, rand_candidates, args.max_swaps)
             forward_states, forward_trace = run_one_shot(base_states, codes, f_candidates, args.max_swaps)
-            tqgsp_states, tqgsp_trace = run_one_shot(base_states, codes, g_candidates, args.max_swaps)
+            qgp_states, qgp_trace = run_one_shot(base_states, codes, g_candidates, args.max_swaps)
             signflip_states, signflip_trace = run_one_shot_flips(base_states, flip_candidates, args.max_swaps)
 
             variant_state_rows = [
                 ("support-random", random_states, random_trace),
                 ("support-forward", forward_states, forward_trace),
-                ("TQGSP-support-G", tqgsp_states, tqgsp_trace),
+                ("QGP-support", qgp_states, qgp_trace),
                 ("NZ-signflip-G", signflip_states, signflip_trace),
             ]
             for name, states, trace in variant_state_rows:
@@ -984,7 +984,7 @@ def main() -> None:
         "model": args.model,
         "config": vars(args),
         "validation_version": {
-            "name": "TQGSP-01B-budget-matched",
+            "name": "TernRefine-support-budget-matched",
             "primary_claim": "ternary zero-support swaps guided by quantized-point gradients improve PTQ without QAT artifacts",
             "anti_claims": [
                 "gain is just random support movement",
@@ -994,7 +994,7 @@ def main() -> None:
                 "cost approaches QAT rather than PTQ post-processing",
             ],
             "gate": {
-                "mechanism": "TQGSP-support-G should beat support-forward, support-random, and NZ-signflip-G on held-out operator NMSE in most tested layer/operator pairs",
+                "mechanism": "QGP-support should beat support-forward, support-random, and NZ-signflip-G on held-out operator NMSE in most tested layer/operator pairs",
                 "transfer": "patched end-to-end NLL should not degrade on untouched split; any improvement is positive evidence but not required for this first validation",
                 "cost": "report wall-clock breakdown; final method should target <=3x a calibrated PTQ-style pass and remain far below QAT",
             },
